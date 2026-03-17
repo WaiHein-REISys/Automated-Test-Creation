@@ -16,10 +16,13 @@ uv sync --python 3.12
 export ATC_ADO_PAT="your-pat-token"
 
 # 3. Run — just paste an ADO URL
-uv run atc run \
-  --url "https://dev.azure.com/org/project/_workitems/edit/12345" \
-  --config configs/runs/example.json
+uv run python -m atc run --config run.json
 ```
+
+> **Note:** Always use `uv run python -m atc` (or the `./run_atc.sh` wrapper) instead of `uv run atc`.
+> The `uv run atc` entry point has a known issue with hatchling editable installs where `.pth` files
+> aren't processed reliably, causing `ModuleNotFoundError: No module named 'atc'`.
+> Using `python -m atc` bypasses this entirely and works every time.
 
 ## Installation
 
@@ -44,14 +47,16 @@ uv sync --python 3.12 --extra dev
 
 | Command | Description |
 |---------|-------------|
-| `atc run` | Execute the full pipeline |
-| `atc validate` | Validate a run config file |
-| `atc init` | Create default config and directories |
+| `python -m atc run` | Execute the full pipeline |
+| `python -m atc validate` | Validate a run config file |
+| `python -m atc init` | Create default config and directories |
 
 ### `atc run`
 
 ```bash
-uv run atc run --config configs/runs/example.json --url "https://dev.azure.com/..." [--dry-run]
+uv run python -m atc run --config run.json --url "https://dev.azure.com/..." [--dry-run]
+# Or use the wrapper script:
+./run_atc.sh run --config run.json
 ```
 
 | Flag | Description |
@@ -63,13 +68,13 @@ uv run atc run --config configs/runs/example.json --url "https://dev.azure.com/.
 ## Pipeline Phases
 
 ```
-atc run --url "https://dev.azure.com/org/project/_workitems/edit/12345"
+uv run python -m atc run --config run.json
     │
     ├─ 1. Parse URL        → auto-detect org, project, work item ID
-    ├─ 2. Fetch hierarchy  → recursively walk Epic → Feature → User Story (any depth)
-    ├─ 3. Build workspace  → folders + .md summaries + download attachments
+    ├─ 2. Fetch hierarchy  → recursively walk Epic → Feature → User Story / PBI / Task
+    ├─ 3. Build workspace  → type-prefixed folders + .md summaries + download attachments
     ├─ 4. Render prompts   → Jinja2 templates with story context + reference steps
-    ├─ 5. Generate         → call AI provider to produce .feature files
+    ├─ 5. Generate         → call AI provider to produce .feature files (with limits)
     ├─ 6. Copy to repo     → place files in target automation repository
     └─ 7. Git commit       → branch + commit (optional push)
 ```
@@ -92,7 +97,10 @@ atc run --url "https://dev.azure.com/org/project/_workitems/edit/12345"
   "options": {
     "dry_run": false,
     "download_attachments": true,
-    "include_images_in_prompt": true
+    "include_images_in_prompt": true,
+    "generation_limit": 0,
+    "generation_limit_per_feature": 0,
+    "generation_only_ids": []
   }
 }
 ```
@@ -110,6 +118,9 @@ atc run --url "https://dev.azure.com/org/project/_workitems/edit/12345"
 | `options.dry_run` | No | Skip AI generation, only build workspace and render prompts |
 | `options.download_attachments` | No | Download work item attachments to `references/` folders (default: `true`) |
 | `options.include_images_in_prompt` | No | Include image attachments in AI prompts for vision models (default: `true`) |
+| `options.generation_limit` | No | Max total feature files to generate. `0` = unlimited (default: `0`) |
+| `options.generation_limit_per_feature` | No | Max feature files per Feature parent folder. `0` = unlimited (default: `0`) |
+| `options.generation_only_ids` | No | Only generate for these work item IDs. `[]` = all (default: `[]`) |
 
 ### Environment Variables (`.env`)
 
@@ -208,18 +219,30 @@ After running, the workspace directory contains:
 workspace/
   {PRODUCT_NAME}/
     EPIC/
-      {EPIC_ID} - {EPIC_TITLE}/
-        EPIC_Summary.md                         ← all epic fields
+      Epic {EPIC_ID} - {EPIC_TITLE}/
+        Epic_Summary.md                              ← all epic fields
         Features/
-          {FEATURE_ID} - {FEATURE_TITLE}/
-            Feature_Summary.md                  ← all feature fields
-            references/                         ← feature attachments
-            {STORY_ID} - {STORY_TITLE}/
-              User_Story_Summary.md             ← story fields + acceptance criteria
-              references/                       ← story attachments (images, docs)
-              scenario_prompt.md                ← rendered AI prompt
-              US{STORY_ID} - {STORY_TITLE}.feature  ← generated feature file
+          Feat {FEATURE_ID} - {FEATURE_TITLE}/
+            Feature_Summary.md                       ← all feature fields
+            references/                              ← feature attachments
+            US{STORY_ID} - {STORY_TITLE}/            ← User Story
+              User_Story_Summary.md
+              references/
+              scenario_prompt.md                     ← rendered AI prompt
+              US{STORY_ID} - {STORY_TITLE}.feature   ← generated feature file
+            PBI{PBI_ID} - {PBI_TITLE}/               ← Product Backlog Item
+              Product_Backlog_Item_Summary.md
+              references/
+              scenario_prompt.md
+              PBI{PBI_ID} - {PBI_TITLE}.feature
+            Task {TASK_ID} - {TASK_TITLE}/            ← Task
+              Task_Summary.md
+              references/
+              scenario_prompt.md
+              Task {TASK_ID} - {TASK_TITLE}.feature
 ```
+
+Folder and file names are prefixed by type (`Epic`, `Feat`, `US`, `PBI`, `Task`) for easy identification. Supports **User Story**, **Product Backlog Item**, and **Task** work item types.
 
 Each `*_Summary.md` includes: title, state, tags, area/iteration path, description, acceptance criteria, additional fields, and attachment links.
 
@@ -298,4 +321,21 @@ uv run ruff format .
 # Type check
 uv run mypy atc/
 ```
-# Automated-Test-Creation
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'atc'`
+
+This is a known issue with hatchling editable installs via uv. The `.pth` file that registers the package
+isn't reliably processed when Python runs the entry point script (`.venv/bin/atc`).
+
+**Fix:** Always use `uv run python -m atc` or the `./run_atc.sh` wrapper instead of `uv run atc`:
+
+```bash
+# These always work:
+uv run python -m atc run --config run.json
+./run_atc.sh run --config run.json
+
+# This may fail:
+uv run atc run --config run.json  # ← don't use this
+```

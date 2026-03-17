@@ -22,6 +22,17 @@ class RunOptions(BaseModel):
     download_attachments: bool = True
     include_images_in_prompt: bool = True
 
+    # Generation limits (0 = unlimited, empty list = all)
+    generation_limit: int = Field(
+        default=0, description="Max total feature files to generate (0 = unlimited)"
+    )
+    generation_limit_per_feature: int = Field(
+        default=0, description="Max feature files per Feature parent folder (0 = unlimited)"
+    )
+    generation_only_ids: list[int] = Field(
+        default_factory=list, description="Only generate for these work item IDs (empty = all)"
+    )
+
 
 class RunConfig(BaseModel):
     """Top-level run configuration loaded from JSON."""

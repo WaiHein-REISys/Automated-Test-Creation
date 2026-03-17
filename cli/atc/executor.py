@@ -73,31 +73,99 @@ async def execute_pipeline(config: RunConfig) -> None:
 
         provider = create_provider(config.provider, settings)
         generated = 0
+        failed = 0
+        skipped = 0
+        total = len(story_nodes)
+
+        # Generation limit settings
+        gen_limit = config.options.generation_limit
+        per_feature_limit = config.options.generation_limit_per_feature
+        only_ids = set(config.options.generation_only_ids)
+        feature_gen_counts: dict[int, int] = {}  # feature_id → count generated
+
+        if gen_limit:
+            console.print(f"[dim]Generation limit:[/dim] {gen_limit} total")
+        if per_feature_limit:
+            console.print(f"[dim]Per-feature limit:[/dim] {per_feature_limit} per Feature parent")
+        if only_ids:
+            console.print(f"[dim]Generating only IDs:[/dim] {sorted(only_ids)}")
 
         if config.options.dry_run:
             print_status("Skipping generation (dry run).", style="bold yellow")
         else:
-            for story_node, ancestors in story_nodes:
+            console.print(f"\n[bold]Generating feature files ({total} items)...[/bold]")
+
+            for idx, (story_node, ancestors) in enumerate(story_nodes, 1):
+                item = story_node.item
+                type_prefix = item.work_item_type.replace(" ", "")
+                label = f"{type_prefix}#{item.id}"
+
+                # Check total generation limit
+                if gen_limit and generated >= gen_limit:
+                    skipped += 1
+                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — total limit reached ({gen_limit})")
+                    continue
+
+                # Check ID filter
+                if only_ids and item.id not in only_ids:
+                    skipped += 1
+                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — not in generation_only_ids")
+                    continue
+
+                # Check per-feature limit
+                feature_parent_id = _get_feature_parent_id(ancestors)
+                if per_feature_limit and feature_parent_id is not None:
+                    count = feature_gen_counts.get(feature_parent_id, 0)
+                    if count >= per_feature_limit:
+                        skipped += 1
+                        feature_label = f"Feature#{feature_parent_id}"
+                        console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — per-feature limit reached for {feature_label} ({per_feature_limit})")
+                        continue
+
                 paths = manifest.get_paths(story_node.id)
                 if not paths or not paths.prompt_path or not paths.feature_path:
+                    skipped += 1
+                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — no prompt or feature path")
                     continue
+
+                if not paths.prompt_path.exists():
+                    skipped += 1
+                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — prompt file not found")
+                    continue
+
+                console.print(f"  [{idx}/{total}] [dim]Generating:[/dim] {label} — {item.title}")
 
                 prompt = paths.prompt_path.read_text(encoding="utf-8")
                 images = [
                     a.local_path
-                    for a in story_node.item.attachments
+                    for a in item.attachments
                     if a.local_path and a.local_path.exists()
                 ]
 
-                content = await provider.generate(prompt, images)
+                try:
+                    content = await provider.generate(prompt, images)
+                except Exception as e:
+                    failed += 1
+                    console.print(f"  [{idx}/{total}] [red]Failed:[/red] {label} — {e}")
+                    continue
+
                 if content:
                     paths.feature_path.write_text(content, encoding="utf-8")
                     generated += 1
-                    console.print(
-                        f"  [green]Generated:[/green] {paths.feature_path.name}"
-                    )
+                    if feature_parent_id is not None:
+                        feature_gen_counts[feature_parent_id] = feature_gen_counts.get(feature_parent_id, 0) + 1
+                    console.print(f"  [{idx}/{total}] [green]Generated:[/green] {paths.feature_path.name}")
+                else:
+                    failed += 1
+                    console.print(f"  [{idx}/{total}] [red]Empty response:[/red] {label} — provider returned no content")
 
-            console.print(f"[bold]Feature files generated:[/bold] {generated}")
+            console.print(
+                f"\n[bold]Generation complete:[/bold] "
+                f"[green]{generated} generated[/green], "
+                f"[red]{failed} failed[/red], "
+                f"[yellow]{skipped} skipped[/yellow] "
+                f"(out of {total})"
+            )
 
         # Phase 5: Copy to target repo
         if config.target_repo_path and not config.options.dry_run:
@@ -119,16 +187,27 @@ async def execute_pipeline(config: RunConfig) -> None:
     print_success("ATC pipeline complete!")
 
 
+def _get_feature_parent_id(ancestors: list["WorkItemNode"]) -> int | None:
+    """Find the Feature parent ID from the ancestor chain."""
+    for ancestor in reversed(ancestors):
+        if ancestor.work_item_type == "Feature":
+            return ancestor.id
+    return None
+
+
+_LEAF_TYPES = {"User Story", "Product Backlog Item", "Task"}
+
+
 def _find_leaf_stories(
     root: "WorkItemNode",
 ) -> list[tuple["WorkItemNode", list["WorkItemNode"]]]:
-    """Find User Story nodes with their ancestor chain."""
+    """Find leaf work item nodes (User Story, PBI, Task) with their ancestor chain."""
     from atc.core.models import WorkItemNode
 
     results: list[tuple[WorkItemNode, list[WorkItemNode]]] = []
 
     def _walk(node: WorkItemNode, ancestors: list[WorkItemNode]) -> None:
-        if node.work_item_type == "User Story":
+        if node.work_item_type in _LEAF_TYPES:
             results.append((node, list(ancestors)))
         else:
             for child in node.children:

@@ -63,11 +63,9 @@ class WorkspaceBuilder:
         """Recursively build folders for a work item node."""
         item = node.item
 
-        # Build folder name based on type
-        if item.work_item_type == "User Story":
-            folder_name = sanitize_path(f"{item.id} - {item.title}")
-        else:
-            folder_name = sanitize_path(f"{item.id} - {item.title}")
+        # Build folder name with type prefix for distinguishability
+        type_prefix = _get_type_prefix(item.work_item_type)
+        folder_name = sanitize_path(f"{type_prefix}{item.id} - {item.title}")
 
         node_dir = parent_path / folder_name
         node_dir.mkdir(parents=True, exist_ok=True)
@@ -85,12 +83,14 @@ class WorkspaceBuilder:
         summary_content = _render_summary(item)
         summary_path.write_text(summary_content, encoding="utf-8")
 
-        # Set up paths for stories (feature file + prompt)
+        # Set up paths for stories (feature file in Test Scenarios + prompt)
         prompt_path = None
         feature_path = None
-        if item.work_item_type == "User Story":
-            feature_name = f"US{item.id} - {sanitize_path(item.title)}.feature"
-            feature_path = node_dir / feature_name
+        if item.work_item_type in ("User Story", "Product Backlog Item", "Task"):
+            test_scenarios_dir = node_dir / "Test Scenarios"
+            test_scenarios_dir.mkdir(exist_ok=True)
+            feature_name = f"{type_prefix}{item.id} - {sanitize_path(item.title)}.feature"
+            feature_path = test_scenarios_dir / feature_name
             prompt_path = node_dir / "scenario_prompt.md"
 
         # Register in manifest
@@ -134,11 +134,23 @@ class WorkspaceBuilder:
                 )
 
 
+def _get_type_prefix(work_item_type: str) -> str:
+    """Return a short prefix for folder/file names based on work item type."""
+    prefixes = {
+        "Epic": "Epic ",
+        "Feature": "Feat ",
+        "User Story": "US",
+        "Product Backlog Item": "PBI",
+        "Task": "Task ",
+    }
+    return prefixes.get(work_item_type, f"{work_item_type} ")
+
+
 def _get_child_container_name(work_item_type: str) -> str | None:
     """Get the container folder name for children of a given type."""
     containers = {
         "Epic": "Features",
-        "Feature": None,  # Stories go directly under feature
+        "Feature": None,  # Stories/PBIs/Tasks go directly under feature
     }
     return containers.get(work_item_type)
 
