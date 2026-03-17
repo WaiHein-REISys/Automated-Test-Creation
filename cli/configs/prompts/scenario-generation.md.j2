@@ -1,0 +1,49 @@
+{{ instructions }}
+
+---
+
+## Context
+
+**Epic:** {{ epic_title }}
+{% if feature_title %}**Feature:** {{ feature_title }}{% endif %}
+
+---
+
+## User Story
+
+**ID:** {{ story_id }}
+**Title:** {{ story_title }}
+
+### Description
+{{ story_description }}
+
+### Acceptance Criteria
+{{ story_acceptance_criteria }}
+
+---
+
+## Reference: Common Steps
+Use these existing step definitions when applicable instead of creating new steps:
+
+```gherkin
+{{ common_steps }}
+```
+
+## Reference: Background Steps
+Use these navigation steps as Background when applicable:
+
+```gherkin
+{{ background_steps }}
+```
+
+{% if image_paths %}
+## Attached Images
+The following images are attached to this user story for additional context:
+{% for img in image_paths %}
+- {{ img }}
+{% endfor %}
+{% endif %}
+
+---
+
+Generate the `.feature` file now. Use tag @US:{{ story_id }} for all generated scenarios.

@@ -1,0 +1,7 @@
+        Given The user clicks on the Grants tab
+        When I click on Grant Folder link for 'H80'
+        And I am on 'Grant Home' page
+        And User clicks on 'FTCA Program' link under Others Section
+        And I am on 'FTCA Home' page
+        And I click on 'Credentialing and Privileging (C&P) Portal' link from the left menu
+        And I am on 'Credentialing and Privileging Portal' page

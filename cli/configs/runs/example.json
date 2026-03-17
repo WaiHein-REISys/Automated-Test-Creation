@@ -1,0 +1,16 @@
+{
+  "url": "https://dev.azure.com/org/project/_workitems/edit/12345",
+  "product_name": "EHB",
+  "workspace_dir": "./workspace",
+  "target_repo_path": null,
+  "branch_name": "dev/DME/feature/EHB",
+  "provider": {
+    "type": "claude",
+    "model": "claude-sonnet-4-20250514"
+  },
+  "options": {
+    "dry_run": false,
+    "download_attachments": true,
+    "include_images_in_prompt": true
+  }
+}

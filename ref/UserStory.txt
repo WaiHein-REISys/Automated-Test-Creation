@@ -1,0 +1,14 @@
+359639
+
+As an external H80 grantee:
+I see that when I click the Update link in the options column for an individual, the Add Credentialing and Privileging Information page is displayed, similar to the page in the FTCA application.
+I see that the fields are prepopulated with the latest information for the individual.
+I see that I can update all information on the page and save the changes.
+I see that if I update the information for an individual, the updates are reflected on the Individual Details RO page.'
+I see that when I click Save and Continue, I am taken back to the C&P - Portal page.
+I see the matching individual overlay is not displayed if I update the name of an individual to an existing individual.
+I see that the date validations are the same as adding a new individual:
+Most Recent Credentialing and Privileging Date validations:
+Provide a past date. - Displayed when a future date is provided.
+Provide a date in the format MM/DD/YYYY - Displayed when an incorrect date format is entered.
+ Please note, for Health Center Federal Tort Claims Act (FTCA) program purposes, all individuals must be credentialed and privileged at least every two years. - Warning displayed when a date beyond 2 years is entered.

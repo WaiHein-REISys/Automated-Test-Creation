@@ -1,0 +1,20 @@
+# {{ work_item_type }}: {{ id }} - {{ title }}
+
+**Type:** {{ work_item_type }}
+**ID:** {{ id }}
+**State:** {{ state }}
+{% if tags %}**Tags:** {{ tags | join(', ') }}{% endif %}
+{% if area_path %}**Area Path:** {{ area_path }}{% endif %}
+{% if iteration_path %}**Iteration Path:** {{ iteration_path }}{% endif %}
+
+{% if description %}
+## Description
+
+{{ description }}
+{% endif %}
+
+{% if acceptance_criteria %}
+## Acceptance Criteria
+
+{{ acceptance_criteria }}
+{% endif %}

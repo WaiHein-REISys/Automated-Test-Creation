@@ -1,0 +1,30 @@
+Given The User Lands on 'FTCA Application - Signatures' Page
+When I click on 'Continue' button
+Then I see below validation message 
+             | ValidationMessage                               |                 
+	         | Enter the data                                  |
+And I should see a Non-Rigid validation error message on the Page as 'Provide a contact name'
+
+
+I see below Non-Rigid validation message
+   | ValidationMessage                               |                 
+   | Enter the data                                  |
+
+  Then I see the grid with the following columns
+    | Column Name     |
+    | Select/Unselect |
+    | Site Id         |
+    | Site Name       |
+    | Site Address    |
+    | Options         |
+
+  Then I see the following resources under View
+    | Resource Name         | URL                                                                                               |
+    | PAL                   | https://bphc.hrsa.gov/sites/default/files/bphc/compliance/pal-2023-01.pdf                         |
+    | Accreditation Website | HRSA Accreditation and Patient-Centered Medical Home Recognition Initiative                       |
+    | The Joint Commission  | https://www.jointcommission.org/                                                                  |
+    | AAAHC                 | https://www.aaahc.org/                                                                            |
+    | NCQA                  | https://www.ncqa.org/programs/health-care-providers-practices/patient-centered-medical-home-pcmh/ |
+
+
+
