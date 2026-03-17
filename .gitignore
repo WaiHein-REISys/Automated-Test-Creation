@@ -57,3 +57,4 @@ logs/
 cli/workspace/
 cli/data/
 cli/logs/
+cli/devops_status_update.py
