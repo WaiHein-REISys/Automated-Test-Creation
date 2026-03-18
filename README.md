@@ -163,6 +163,7 @@ uv run python -m atc run --config run.json
   "workspace_dir": "./workspace",
   "target_repo_path": "/path/to/EHB-UI-Automation",
   "branch_name": "dev/DME/feature/EHB",
+  "ado_api_version": "auto",
   "provider": {
     "type": "claude",
     "model": "claude-sonnet-4-20250514"
@@ -185,6 +186,7 @@ uv run python -m atc run --config run.json
 | `workspace_dir` | No | Local workspace directory (default: `./workspace`) |
 | `target_repo_path` | No | Path to target automation repo. If set, generated files are copied there |
 | `branch_name` | No | Git branch name (e.g., `dev/DME/feature/EHB`). If set, auto-commits |
+| `ado_api_version` | No | ADO REST API version: `"auto"` (default, probes server), `"7.1"`, `"7.0"`, `"6.0"` |
 | `provider.type` | No | AI provider: `claude`, `azure_openai`, `ollama`, `cli_agent`, or `prompt_only` |
 | `provider.model` | No | Model name or deployment name (depends on provider) |
 | `provider.options` | No | Provider-specific options (see provider sections below) |
@@ -440,6 +442,26 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 python -m atc --help
+```
+
+### `400 Bad Request` — API version out of range (on-prem ADS)
+
+If your on-premises Azure DevOps Server returns:
+
+```
+The requested REST API version of 7.1 is out of range for this server.
+```
+
+ATC now **auto-detects** the server's supported version by default. If you still see this on older code, set the version explicitly:
+
+```json
+// in run.json:
+"ado_api_version": "7.0"
+```
+
+Or via environment variable:
+```
+ATC_ADO_API_VERSION=7.0
 ```
 
 ### PowerShell execution policy error

@@ -12,6 +12,7 @@ class AtcSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ATC_", env_file=".env", extra="ignore")
 
     ado_pat: SecretStr = SecretStr("")
+    ado_api_version: str = "auto"  # "auto", "7.1", "7.0", "6.0", etc.
 
     # Provider-specific (optional, depending on chosen provider)
     anthropic_api_key: SecretStr = SecretStr("")

@@ -29,7 +29,14 @@ async def execute_pipeline(config: RunConfig) -> None:
 
     from atc.infra.ado import AdoClient
 
-    async with AdoClient(target.org_url, target.project, pat) as ado:
+    # Determine API version: env var > run.json > auto
+    api_version = config.ado_api_version
+    if settings.ado_api_version != "auto":
+        api_version = settings.ado_api_version
+    if api_version != "auto":
+        print_status(f"Using ADO API version: {api_version}")
+
+    async with AdoClient(target.org_url, target.project, pat, api_version=api_version) as ado:
         print_status("Fetching work item hierarchy...")
         tree = await ado.get_tree(target.work_item_id)
 

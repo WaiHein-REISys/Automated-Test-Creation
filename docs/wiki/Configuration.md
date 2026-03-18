@@ -40,6 +40,7 @@ The run config controls what to process and how. Create one with `python -m atc 
 | `workspace_dir` | No | `./workspace` | Local directory where the workspace is built. |
 | `target_repo_path` | No | `null` | Path to the target automation repo. If set, generated `.feature` files are copied there after generation. |
 | `branch_name` | No | `null` | Git branch name. If set along with `target_repo_path`, ATC creates/switches to this branch and commits generated files. |
+| `ado_api_version` | No | `auto` | Azure DevOps REST API version. `"auto"` probes the server (tries 7.1 → 7.0 → 6.0). Set explicitly (e.g. `"7.0"`) for on-prem servers that reject newer versions. |
 | `provider.type` | No | `prompt_only` | AI provider: `claude`, `azure_openai`, `ollama`, `cli_agent`, or `prompt_only`. See [Providers](Providers.md). |
 | `provider.model` | No | varies | Model name or deployment name. Depends on provider. |
 | `provider.options` | No | `{}` | Provider-specific options (e.g. `endpoint`, `api_version` for Azure OpenAI). |
@@ -75,6 +76,7 @@ All variables use the `ATC_` prefix. Place them in `cli/.env` (loaded automatica
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ATC_ADO_PAT` | Always | Azure DevOps Personal Access Token (work item read access) |
+| `ATC_ADO_API_VERSION` | No | ADO REST API version override (`"auto"`, `"7.1"`, `"7.0"`, `"6.0"`). Overrides `ado_api_version` in `run.json`. |
 | `ATC_ANTHROPIC_API_KEY` | If provider = `claude` | Anthropic API key |
 | `ATC_AZURE_OPENAI_ENDPOINT` | If provider = `azure_openai` | Azure OpenAI endpoint URL |
 | `ATC_AZURE_OPENAI_API_KEY` | If provider = `azure_openai` | Azure OpenAI API key |

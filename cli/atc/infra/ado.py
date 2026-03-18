@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -11,15 +12,29 @@ from markdownify import markdownify as md
 
 from atc.core.models import Attachment, Relation, WorkItem, WorkItemNode
 
+logger = logging.getLogger(__name__)
+
+# Versions to probe in order (newest first) when ado_api_version="auto"
+_PROBE_VERSIONS = ("7.1", "7.0", "6.0")
+
 
 class AdoClient:
     """Async client for Azure DevOps REST API."""
 
-    API_VERSION = "7.1"
+    API_VERSION = "7.1"  # default; overridden by ``api_version`` param or auto-probe
 
-    def __init__(self, org_url: str, project: str, pat: str) -> None:
+    def __init__(
+        self,
+        org_url: str,
+        project: str,
+        pat: str,
+        *,
+        api_version: str = "auto",
+    ) -> None:
         self.org_url = org_url.rstrip("/")
         self.project = project
+        self._requested_api_version = api_version
+        self._api_version_resolved = False
         token = base64.b64encode(f":{pat}".encode()).decode()
         self._client = httpx.AsyncClient(
             base_url=f"{self.org_url}/{project}/_apis",
@@ -27,12 +42,75 @@ class AdoClient:
             timeout=30.0,
         )
 
+        # If an explicit version was given (not "auto"), use it immediately.
+        if api_version.lower() != "auto":
+            self.API_VERSION = api_version
+            self._api_version_resolved = True
+
     @classmethod
-    def from_url(cls, url: str, pat: str) -> "AdoClient":
+    def from_url(
+        cls,
+        url: str,
+        pat: str,
+        *,
+        api_version: str = "auto",
+    ) -> "AdoClient":
         from atc.infra.ado_url import parse_ado_url
 
         target = parse_ado_url(url)
-        return cls(target.org_url, target.project, pat)
+        return cls(target.org_url, target.project, pat, api_version=api_version)
+
+    # ------------------------------------------------------------------
+    # Auto-probe: detect the best API version the server supports
+    # ------------------------------------------------------------------
+
+    async def _ensure_api_version(self) -> None:
+        """Probe the server for its supported API version (once)."""
+        if self._api_version_resolved:
+            return
+
+        for version in _PROBE_VERSIONS:
+            try:
+                resp = await self._client.get(
+                    "/wit/workitemtypes",
+                    params={"api-version": version, "$top": 1},
+                )
+                if resp.status_code < 400:
+                    self.API_VERSION = version
+                    self._api_version_resolved = True
+                    logger.info("ADO server supports API version %s", version)
+                    return
+
+                # Check for the specific "version out of range" error
+                body = resp.text
+                if "VssVersionOutOfRangeException" in body:
+                    logger.debug(
+                        "ADO server rejected API version %s — trying older version",
+                        version,
+                    )
+                    continue
+
+                # Some other 4xx/5xx — might be auth related; stop probing
+                # and fall through to the default to surface a clear error later
+                logger.warning(
+                    "Unexpected %s response during API version probe with v%s",
+                    resp.status_code,
+                    version,
+                )
+                break
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "HTTP error during API version probe with v%s: %s", version, exc
+                )
+                break
+
+        # If no version succeeded, fall back to the lowest we tried
+        self.API_VERSION = _PROBE_VERSIONS[-1]
+        self._api_version_resolved = True
+        logger.warning(
+            "Could not auto-detect ADO API version; falling back to %s",
+            self.API_VERSION,
+        )
 
     async def __aenter__(self) -> "AdoClient":
         return self
@@ -42,6 +120,7 @@ class AdoClient:
 
     async def get_work_item(self, work_item_id: int) -> WorkItem:
         """Fetch a single work item with all fields and relations."""
+        await self._ensure_api_version()
         resp = await self._client.get(
             f"/wit/workitems/{work_item_id}",
             params={"$expand": "all", "api-version": self.API_VERSION},
@@ -52,6 +131,7 @@ class AdoClient:
 
     async def get_work_items_batch(self, ids: list[int]) -> list[WorkItem]:
         """Fetch multiple work items in batches of 200."""
+        await self._ensure_api_version()
         results: list[WorkItem] = []
         for i in range(0, len(ids), 200):
             chunk = ids[i : i + 200]

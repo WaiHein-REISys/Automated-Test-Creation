@@ -114,6 +114,41 @@ https://myserver.com/tfs/DefaultCollection/MyProject/_workitems/edit/123
 
 **Fix:** Validate with `./run_atc.sh validate --config run.json` to see the specific error.
 
+### `400 Bad Request` — REST API version out of range
+
+**Cause:** Your on-prem Azure DevOps Server supports an older API version than ATC's default (7.1).
+
+**Error message:**
+```
+Client Error '400 bad request' for URL
+"The requested REST API version of 7.1 is out of range for this server.
+The latest REST API version this server supports is 7.0."
+```
+
+**Fix (option 1 — automatic):** ATC now auto-detects the server's supported API version by default. If you're seeing this error on an older build, update to the latest ATC code.
+
+**Fix (option 2 — explicit version in run.json):**
+```json
+{
+  "url": "https://ehbads.hrsa.gov/ads/EHBs/EHBs/_workitems/edit/411599",
+  "ado_api_version": "7.0",
+  ...
+}
+```
+
+**Fix (option 3 — environment variable):**
+```bash
+# .env
+ATC_ADO_API_VERSION=7.0
+```
+
+```powershell
+# PowerShell
+$env:ATC_ADO_API_VERSION = "7.0"
+```
+
+The env var takes precedence over `run.json`. Set to `"auto"` (default) to let ATC probe the server.
+
 ## Runtime issues
 
 ### `ATC_ADO_PAT environment variable is not set`

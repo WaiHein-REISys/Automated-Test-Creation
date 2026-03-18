@@ -46,5 +46,13 @@ class RunConfig(BaseModel):
     branch_name: str | None = Field(
         default=None, description="Git branch name, e.g. dev/DME/feature/EHB"
     )
+    ado_api_version: str = Field(
+        default="auto",
+        description=(
+            "Azure DevOps REST API version. "
+            "'auto' probes the server and picks the best supported version (7.1, 7.0, 6.0). "
+            "Set explicitly (e.g. '7.0') for on-prem servers that reject newer versions."
+        ),
+    )
     provider: ProviderConfig = Field(default_factory=ProviderConfig)
     options: RunOptions = Field(default_factory=RunOptions)
