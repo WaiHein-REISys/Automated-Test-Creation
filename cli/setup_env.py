@@ -103,10 +103,10 @@ def setup_with_pip(extras: list[str]) -> None:
     else:
         _print(f"Virtual environment already exists at {VENV_DIR}/", "ok")
 
-    pip = find_pip(venv)
+    py = find_python(venv)
 
     # Upgrade pip first
-    run([pip, "install", "--upgrade", "pip"])
+    run([py, "-m", "pip", "install", "--upgrade", "pip"])
 
     # Build the install spec
     install_spec = "."
@@ -114,7 +114,7 @@ def setup_with_pip(extras: list[str]) -> None:
         extra_str = ",".join(extras)
         install_spec = f".[{extra_str}]"
 
-    run([pip, "install", "-e", install_spec])
+    run([py, "-m", "pip", "install", "-e", install_spec])
     _print("Dependencies installed", "ok")
 
     # Print activation instructions

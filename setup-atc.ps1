@@ -53,7 +53,7 @@ function Invoke-Native {
 
     Push-Location $WorkingDirectory
     try {
-        if ($Arguments.Count -gt 0) {
+        if ($null -ne $Arguments -and $Arguments.Count -gt 0) {
             & $FilePath @Arguments
         }
         else {
@@ -61,7 +61,7 @@ function Invoke-Native {
         }
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code $LASTEXITCODE: $FilePath $($Arguments -join ' ')"
+            throw "Command failed with exit code ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')"
         }
     }
     finally {
@@ -243,7 +243,7 @@ function Invoke-SetupEnv {
     $args += @("setup_env.py")
 
     $extras = Resolve-SetupExtras
-    if ($extras.Count -gt 0) {
+    if ($null -ne $extras -and $extras.Count -gt 0) {
         $args += "--extras"
         $args += $extras
     }
