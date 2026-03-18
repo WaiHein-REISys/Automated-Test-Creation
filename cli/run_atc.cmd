@@ -3,6 +3,12 @@ REM Windows CMD wrapper to run ATC.
 REM Usage: run_atc.cmd run --config run.json
 REM        run_atc.cmd run --config run.json --dry-run
 
+REM Change to script directory so uv can find pyproject.toml
+cd /d "%~dp0"
+
+REM Ensure the atc package is importable even if the editable .pth has a stale path
+set "PYTHONPATH=%~dp0;%PYTHONPATH%"
+
 REM Prefer uv if available
 where uv >nul 2>&1
 if %ERRORLEVEL% equ 0 (

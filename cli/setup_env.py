@@ -86,7 +86,11 @@ def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
 def setup_with_uv(uv: str, extras: list[str]) -> None:
     """Set up the environment using uv."""
     _print("Using uv for dependency management", "ok")
-    cmd = [uv, "sync", "--python", f"{PYTHON_MIN[0]}.{PYTHON_MIN[1]}"]
+
+    # Force reinstall of the local package so the editable .pth file points to
+    # the current directory (it contains an absolute path that goes stale when
+    # the repo is moved or cloned to a new location).
+    cmd = [uv, "sync", "--reinstall-package", "atc", "--python", f"{PYTHON_MIN[0]}.{PYTHON_MIN[1]}"]
     for extra in extras:
         cmd.extend(["--extra", extra])
     run(cmd)
