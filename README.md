@@ -9,38 +9,106 @@ ATC fetches your Epic → Feature → User Story hierarchy from ADO, builds a st
 ```bash
 cd cli
 
-# 1. Install dependencies
-uv sync --python 3.12
+# 1. Install dependencies (works on Windows, macOS, Linux)
+python setup_env.py
 
 # 2. Set your ADO Personal Access Token
+#    Linux / macOS:
 export ATC_ADO_PAT="your-pat-token"
+#    Windows PowerShell:
+#    $env:ATC_ADO_PAT = "your-pat-token"
+#    Windows CMD:
+#    set ATC_ADO_PAT=your-pat-token
+#    Or add it to the .env file (recommended — created automatically by setup_env.py)
 
 # 3. Run — just paste an ADO URL
-uv run python -m atc run --config run.json
+#    Linux / macOS:
+./run_atc.sh run --config run.json
+#    Windows PowerShell:
+#    .\run_atc.ps1 run --config run.json
+#    Windows CMD:
+#    run_atc.cmd run --config run.json
 ```
 
-> **Note:** Always use `uv run python -m atc` (or the `./run_atc.sh` wrapper) instead of `uv run atc`.
+> **Note:** Always use `python -m atc` (or the wrapper scripts) instead of `uv run atc`.
 > The `uv run atc` entry point has a known issue with hatchling editable installs where `.pth` files
 > aren't processed reliably, causing `ModuleNotFoundError: No module named 'atc'`.
-> Using `python -m atc` bypasses this entirely and works every time.
+> The wrapper scripts handle this automatically — they try uv first, fall back to the venv, then system Python.
 
 ## Installation
 
-**Prerequisites:** Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+**Prerequisites:** Python 3.12 or 3.13, and (optionally) [uv](https://docs.astral.sh/uv/).
+
+The setup script auto-detects your OS and available tools. It uses **uv** if installed, otherwise falls back to **venv + pip**.
+
+### PowerShell one-shot setup
+
+From the repository root, Windows users can run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\setup-atc.ps1 -Provider prompt_only
+```
+
+What it does:
+
+- calls `cli/setup_env.py` to install dependencies
+- runs `atc init`
+- creates `cli/.env` and `cli/run.json` if they do not already exist
+- preserves existing `cli/.env` and `cli/run.json` unless you pass `-Force`
+
+Useful options:
+
+- `-Provider prompt_only|claude|azure_openai|ollama|cli_agent`
+- `-IncludeDevTools`
+- `-AdoPat "..."`, `-AdoUrl "https://dev.azure.com/..."`
+- `-ProductName "EHB"`, `-TargetRepoPath "C:\Repos\EHB-UI-Automation"`
+- `-BranchName "dev/DME/feature/EHB"`
+- `-Force`
+
+If you want the virtual environment to remain active in the current PowerShell session, dot-source the script:
+
+```powershell
+. .\setup-atc.ps1 -Provider prompt_only
+```
 
 ```bash
-# Install uv (if not already installed)
-pip install uv
+cd cli
 
-# Install project dependencies
-uv sync --python 3.12
+# Recommended: one-command setup (all platforms)
+python setup_env.py
 
 # Install with a specific AI provider
-uv sync --python 3.12 --extra claude         # Anthropic Claude API
-uv sync --python 3.12 --extra azure-openai   # Azure OpenAI
+python setup_env.py --extras claude         # Anthropic Claude API
+python setup_env.py --extras azure-openai   # Azure OpenAI
 
 # Install dev dependencies (pytest, ruff, mypy)
-uv sync --python 3.12 --extra dev
+python setup_env.py --extras dev
+
+# Install everything
+python setup_env.py --extras all
+```
+
+### Manual installation with uv (macOS/Linux)
+
+```bash
+uv sync --python 3.12
+uv sync --python 3.12 --extra claude         # with Claude
+uv sync --python 3.12 --extra azure-openai   # with Azure OpenAI
+uv sync --python 3.12 --extra dev            # with dev tools
+```
+
+### Manual installation with pip (all platforms, Windows-friendly)
+
+```bash
+python -m venv .venv
+
+# Activate:
+#   Linux / macOS:  source .venv/bin/activate
+#   PowerShell:     .\.venv\Scripts\Activate.ps1
+#   CMD:            .\.venv\Scripts\activate.bat
+
+pip install -e ".[claude,dev]"
 ```
 
 ## Commands
@@ -54,9 +122,14 @@ uv sync --python 3.12 --extra dev
 ### `atc run`
 
 ```bash
-uv run python -m atc run --config run.json --url "https://dev.azure.com/..." [--dry-run]
-# Or use the wrapper script:
-./run_atc.sh run --config run.json
+# Linux / macOS:
+./run_atc.sh run --config run.json --url "https://dev.azure.com/..." --dry-run
+
+# Windows PowerShell:
+.\run_atc.ps1 run --config run.json --url "https://dev.azure.com/..." --dry-run
+
+# Windows CMD:
+run_atc.cmd run --config run.json --url "https://dev.azure.com/..." --dry-run
 ```
 
 | Flag | Description |
@@ -254,7 +327,10 @@ ATC auto-parses these ADO URL formats — no manual org/project configuration ne
 https://dev.azure.com/{org}/{project}/_workitems/edit/{id}
 https://dev.azure.com/{org}/{project}/_backlogs/backlog/{team}/Epics/?workitem={id}
 https://{org}.visualstudio.com/{project}/_workitems/edit/{id}
+https://{server}/{path}/{collection}/{project}/_workitems/edit/{id}   (on-prem ADS)
 ```
+
+On-premises Azure DevOps Server (ADS) URLs are detected automatically by looking for ADO path markers (`_workitems`, `_backlogs`, etc.).
 
 ## Reference Files
 
@@ -273,6 +349,10 @@ Edit these files to customize the generation rules and step library for your pro
 ```
 cli/
   pyproject.toml                    ← dependencies and build config
+  setup_env.py                      ← cross-platform setup script
+  run_atc.sh                        ← run wrapper (macOS / Linux)
+  run_atc.ps1                       ← run wrapper (Windows PowerShell)
+  run_atc.cmd                       ← run wrapper (Windows CMD)
   .env                              ← environment variables (not committed)
   atc/
     main.py                         ← Typer CLI: run, validate, init
@@ -309,8 +389,11 @@ cli/
 ## Development
 
 ```bash
-# Run tests
+# Run tests (with uv)
 uv run pytest
+
+# Or without uv (activate venv first)
+pytest
 
 # Lint
 uv run ruff check .
@@ -327,15 +410,42 @@ uv run mypy atc/
 ### `ModuleNotFoundError: No module named 'atc'`
 
 This is a known issue with hatchling editable installs via uv. The `.pth` file that registers the package
-isn't reliably processed when Python runs the entry point script (`.venv/bin/atc`).
+isn't reliably processed when Python runs the entry point script.
 
-**Fix:** Always use `uv run python -m atc` or the `./run_atc.sh` wrapper instead of `uv run atc`:
+**Fix:** Use the wrapper scripts or `python -m atc` instead of `uv run atc`:
 
 ```bash
 # These always work:
-uv run python -m atc run --config run.json
-./run_atc.sh run --config run.json
+./run_atc.sh run --config run.json          # macOS / Linux
+.\run_atc.ps1 run --config run.json         # Windows PowerShell
+run_atc.cmd run --config run.json           # Windows CMD
+uv run python -m atc run --config run.json  # Direct (any platform)
 
 # This may fail:
-uv run atc run --config run.json  # ← don't use this
+uv run atc run --config run.json  # don't use this
+```
+
+### `uv` not working on Windows
+
+If `uv` fails to install or run on Windows, use the pip fallback:
+
+```bash
+python setup_env.py          # auto-detects and uses pip if uv is unavailable
+```
+
+Or install manually:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+python -m atc --help
+```
+
+### PowerShell execution policy error
+
+If `.\run_atc.ps1` is blocked by execution policy:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```

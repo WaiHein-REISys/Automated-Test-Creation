@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from atc.output.console import console
+
+
+def _find_git() -> str:
+    """Locate the git executable, raising a clear error if missing."""
+    git = shutil.which("git")
+    if git:
+        return git
+    # Common Windows install locations when git isn't on PATH
+    if sys.platform == "win32":
+        for candidate in (
+            Path(r"C:\Program Files\Git\cmd\git.exe"),
+            Path(r"C:\Program Files (x86)\Git\cmd\git.exe"),
+        ):
+            if candidate.exists():
+                return str(candidate)
+    raise FileNotFoundError(
+        "git executable not found. Install Git and ensure it is on your PATH."
+    )
 
 
 class GitClient:
@@ -13,12 +33,13 @@ class GitClient:
 
     def __init__(self, repo_path: Path) -> None:
         self.repo_path = Path(repo_path)
+        self._git = _find_git()
         if not (self.repo_path / ".git").exists():
             raise ValueError(f"Not a git repository: {self.repo_path}")
 
     def _run(self, *args: str) -> str:
         result = subprocess.run(
-            ["git", *args],
+            [self._git, *args],
             cwd=self.repo_path,
             capture_output=True,
             text=True,
