@@ -72,6 +72,21 @@ def validate(
 
 
 @app.command()
+def ui(
+    port: Annotated[int, typer.Option("--port", "-p", help="Port to serve the UI on")] = 8080,
+    reload: Annotated[bool, typer.Option("--reload", help="Auto-reload on code changes")] = False,
+    native: Annotated[bool, typer.Option("--native", help="Open in native window instead of browser")] = False,
+) -> None:
+    """Launch the ATC web UI in your browser."""
+    try:
+        from atc.ui.app import start_ui
+    except ImportError:
+        console.print("[red]NiceGUI is not installed. Install with: uv pip install nicegui[/red]")
+        raise typer.Exit(code=1)
+    start_ui(port=port, reload=reload, native=native)
+
+
+@app.command()
 def init() -> None:
     """One-time setup: create default config and directory structure."""
     configs_dir = Path("configs/runs")

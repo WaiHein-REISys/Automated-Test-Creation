@@ -2,30 +2,79 @@
 
 from __future__ import annotations
 
+import asyncio
+
+from atc.core.progress import Phase, ProgressEvent, ProgressReporter
 from atc.infra.config import RunConfig
 from atc.infra.settings import AtcSettings
 from atc.output.console import console, print_error, print_status, print_success
 
 
-async def execute_pipeline(config: RunConfig) -> None:
+async def _emit(
+    reporter: ProgressReporter | None,
+    phase: Phase,
+    message: str,
+    *,
+    current: int = 0,
+    total: int = 0,
+    level: str = "info",
+) -> None:
+    """Emit a progress event if a reporter is attached."""
+    if reporter:
+        await reporter.report(ProgressEvent(phase, message, current, total, level))
+
+
+async def _phase_start(reporter: ProgressReporter | None, phase: Phase, message: str) -> None:
+    if reporter:
+        await reporter.phase_start(phase, message)
+
+
+async def _phase_end(reporter: ProgressReporter | None, phase: Phase, message: str) -> None:
+    if reporter:
+        await reporter.phase_end(phase, message)
+
+
+class PipelineCancelled(Exception):
+    """Raised when the pipeline is cancelled via cancel_event."""
+
+
+def _check_cancel(cancel_event: asyncio.Event | None) -> None:
+    """Raise PipelineCancelled if cancellation has been requested."""
+    if cancel_event and cancel_event.is_set():
+        raise PipelineCancelled("Pipeline cancelled by user")
+
+
+async def execute_pipeline(
+    config: RunConfig,
+    reporter: ProgressReporter | None = None,
+    cancel_event: asyncio.Event | None = None,
+) -> None:
     """Main pipeline: ingest → workspace → prompt → generate → copy → git."""
     settings = AtcSettings()
     pat = settings.ado_pat.get_secret_value()
 
     if not pat:
         print_error("ATC_ADO_PAT environment variable is not set.")
+        await _emit(reporter, Phase.PARSE_URL, "ATC_ADO_PAT is not set", level="error")
         return
 
     print_status(f"Starting ATC pipeline for: {config.url}")
+    await _emit(reporter, Phase.PARSE_URL, f"Starting pipeline for: {config.url}")
 
     if config.options.dry_run:
         print_status("DRY RUN — no changes will be made.", style="bold yellow")
+        await _emit(reporter, Phase.PARSE_URL, "DRY RUN mode enabled", level="warning")
 
     # Phase 1: Parse URL and fetch ADO hierarchy
+    _check_cancel(cancel_event)
+    await _phase_start(reporter, Phase.PARSE_URL, "Parsing ADO URL...")
     from atc.infra.ado_url import parse_ado_url
 
     target = parse_ado_url(config.url)
-    print_status(f"Parsed URL → org={target.org}, project={target.project}, id={target.work_item_id}")
+    msg = f"Parsed URL → org={target.org}, project={target.project}, id={target.work_item_id}"
+    print_status(msg)
+    await _emit(reporter, Phase.PARSE_URL, msg, level="success")
+    await _phase_end(reporter, Phase.PARSE_URL, "URL parsed successfully")
 
     from atc.infra.ado import AdoClient
 
@@ -35,7 +84,11 @@ async def execute_pipeline(config: RunConfig) -> None:
         api_version = settings.ado_api_version
     if api_version != "auto":
         print_status(f"Using ADO API version: {api_version}")
+        await _emit(reporter, Phase.FETCH_HIERARCHY, f"Using API version: {api_version}")
 
+    await _phase_start(reporter, Phase.FETCH_HIERARCHY, "Fetching work item hierarchy...")
+
+    _check_cancel(cancel_event)
     async with AdoClient(target.org_url, target.project, pat, api_version=api_version) as ado:
         print_status("Fetching work item hierarchy...")
         tree = await ado.get_tree(target.work_item_id)
@@ -43,8 +96,18 @@ async def execute_pipeline(config: RunConfig) -> None:
         from atc.output.console import print_tree
 
         print_tree(tree, title=f"Epic #{target.work_item_id}")
+        all_nodes = tree.walk()
+        await _emit(
+            reporter,
+            Phase.FETCH_HIERARCHY,
+            f"Fetched {len(all_nodes)} work items",
+            level="success",
+        )
+        await _phase_end(reporter, Phase.FETCH_HIERARCHY, "Hierarchy fetched")
 
         # Phase 2: Build workspace
+        _check_cancel(cancel_event)
+        await _phase_start(reporter, Phase.BUILD_WORKSPACE, "Building workspace...")
         from atc.infra.workspace import WorkspaceBuilder
 
         builder = WorkspaceBuilder(config.workspace_dir, config.product_name)
@@ -52,15 +115,24 @@ async def execute_pipeline(config: RunConfig) -> None:
 
         console.print(f"\n[bold]Workspace built at:[/bold] {manifest.root}")
         console.print(f"[bold]Work items processed:[/bold] {len(manifest.items)}")
+        await _emit(
+            reporter,
+            Phase.BUILD_WORKSPACE,
+            f"Workspace built at {manifest.root} — {len(manifest.items)} items",
+            level="success",
+        )
+        await _phase_end(reporter, Phase.BUILD_WORKSPACE, "Workspace ready")
 
         # Phase 3: Render prompts
+        _check_cancel(cancel_event)
+        await _phase_start(reporter, Phase.RENDER_PROMPTS, "Rendering prompts...")
         from atc.infra.prompts import PromptRenderer
 
         renderer = PromptRenderer()
         story_nodes = _find_leaf_stories(tree)
         prompts_rendered = 0
 
-        for story_node, ancestors in story_nodes:
+        for i, (story_node, ancestors) in enumerate(story_nodes, 1):
             paths = manifest.get_paths(story_node.id)
             if not paths or not paths.prompt_path:
                 continue
@@ -72,10 +144,26 @@ async def execute_pipeline(config: RunConfig) -> None:
             )
             paths.prompt_path.write_text(prompt, encoding="utf-8")
             prompts_rendered += 1
+            if reporter:
+                await reporter.item_progress(
+                    Phase.RENDER_PROMPTS,
+                    i,
+                    len(story_nodes),
+                    f"Rendered prompt for #{story_node.id}",
+                )
 
         console.print(f"[bold]Prompts rendered:[/bold] {prompts_rendered}")
+        await _emit(
+            reporter,
+            Phase.RENDER_PROMPTS,
+            f"Rendered {prompts_rendered} prompts",
+            level="success",
+        )
+        await _phase_end(reporter, Phase.RENDER_PROMPTS, "Prompts rendered")
 
         # Phase 4: Generate feature files
+        _check_cancel(cancel_event)
+        await _phase_start(reporter, Phase.GENERATE_FEATURES, "Generating feature files...")
         from atc.providers import create_provider
 
         provider = create_provider(config.provider, settings)
@@ -99,10 +187,17 @@ async def execute_pipeline(config: RunConfig) -> None:
 
         if config.options.dry_run:
             print_status("Skipping generation (dry run).", style="bold yellow")
+            await _emit(
+                reporter,
+                Phase.GENERATE_FEATURES,
+                "Skipped generation (dry run)",
+                level="warning",
+            )
         else:
             console.print(f"\n[bold]Generating feature files ({total} items)...[/bold]")
 
             for idx, (story_node, ancestors) in enumerate(story_nodes, 1):
+                _check_cancel(cancel_event)
                 item = story_node.item
                 type_prefix = item.work_item_type.replace(" ", "")
                 label = f"{type_prefix}#{item.id}"
@@ -110,13 +205,17 @@ async def execute_pipeline(config: RunConfig) -> None:
                 # Check total generation limit
                 if gen_limit and generated >= gen_limit:
                     skipped += 1
-                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — total limit reached ({gen_limit})")
+                    msg = f"Skipped: {label} — total limit reached ({gen_limit})"
+                    console.print(f"  [{idx}/{total}] [yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="warning")
                     continue
 
                 # Check ID filter
                 if only_ids and item.id not in only_ids:
                     skipped += 1
-                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — not in generation_only_ids")
+                    msg = f"Skipped: {label} — not in generation_only_ids"
+                    console.print(f"  [{idx}/{total}] [yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="warning")
                     continue
 
                 # Check per-feature limit
@@ -126,21 +225,34 @@ async def execute_pipeline(config: RunConfig) -> None:
                     if count >= per_feature_limit:
                         skipped += 1
                         feature_label = f"Feature#{feature_parent_id}"
-                        console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — per-feature limit reached for {feature_label} ({per_feature_limit})")
+                        msg = f"Skipped: {label} — per-feature limit reached for {feature_label} ({per_feature_limit})"
+                        console.print(f"  [{idx}/{total}] [yellow]{msg}[/yellow]")
+                        await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="warning")
                         continue
 
                 paths = manifest.get_paths(story_node.id)
                 if not paths or not paths.prompt_path or not paths.feature_path:
                     skipped += 1
-                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — no prompt or feature path")
+                    msg = f"Skipped: {label} — no prompt or feature path"
+                    console.print(f"  [{idx}/{total}] [yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="warning")
                     continue
 
                 if not paths.prompt_path.exists():
                     skipped += 1
-                    console.print(f"  [{idx}/{total}] [yellow]Skipped:[/yellow] {label} — prompt file not found")
+                    msg = f"Skipped: {label} — prompt file not found"
+                    console.print(f"  [{idx}/{total}] [yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="warning")
                     continue
 
                 console.print(f"  [{idx}/{total}] [dim]Generating:[/dim] {label} — {item.title}")
+                await _emit(
+                    reporter,
+                    Phase.GENERATE_FEATURES,
+                    f"Generating: {label} — {item.title}",
+                    current=idx,
+                    total=total,
+                )
 
                 prompt = paths.prompt_path.read_text(encoding="utf-8")
                 images = [
@@ -153,7 +265,9 @@ async def execute_pipeline(config: RunConfig) -> None:
                     content = await provider.generate(prompt, images)
                 except Exception as e:
                     failed += 1
-                    console.print(f"  [{idx}/{total}] [red]Failed:[/red] {label} — {e}")
+                    msg = f"Failed: {label} — {e}"
+                    console.print(f"  [{idx}/{total}] [red]{msg}[/red]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="error")
                     continue
 
                 if content:
@@ -161,11 +275,19 @@ async def execute_pipeline(config: RunConfig) -> None:
                     generated += 1
                     if feature_parent_id is not None:
                         feature_gen_counts[feature_parent_id] = feature_gen_counts.get(feature_parent_id, 0) + 1
-                    console.print(f"  [{idx}/{total}] [green]Generated:[/green] {paths.feature_path.name}")
+                    msg = f"Generated: {paths.feature_path.name}"
+                    console.print(f"  [{idx}/{total}] [green]{msg}[/green]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="success")
                 else:
                     failed += 1
-                    console.print(f"  [{idx}/{total}] [red]Empty response:[/red] {label} — provider returned no content")
+                    msg = f"Empty response: {label} — provider returned no content"
+                    console.print(f"  [{idx}/{total}] [red]{msg}[/red]")
+                    await _emit(reporter, Phase.GENERATE_FEATURES, msg, current=idx, total=total, level="error")
 
+            summary = (
+                f"Generation complete: {generated} generated, "
+                f"{failed} failed, {skipped} skipped (out of {total})"
+            )
             console.print(
                 f"\n[bold]Generation complete:[/bold] "
                 f"[green]{generated} generated[/green], "
@@ -173,15 +295,27 @@ async def execute_pipeline(config: RunConfig) -> None:
                 f"[yellow]{skipped} skipped[/yellow] "
                 f"(out of {total})"
             )
+            await _emit(reporter, Phase.GENERATE_FEATURES, summary, level="success")
+
+        await _phase_end(reporter, Phase.GENERATE_FEATURES, "Generation phase complete")
 
         # Phase 5: Copy to target repo
+        _check_cancel(cancel_event)
+        await _phase_start(reporter, Phase.COPY_TO_REPO, "Copying to target repo...")
         if config.target_repo_path and not config.options.dry_run:
             from atc.infra.workspace import copy_to_target_repo
 
             copied = copy_to_target_repo(manifest, config.target_repo_path)
             console.print(f"[bold]Files copied to repo:[/bold] {copied}")
+            await _emit(
+                reporter,
+                Phase.COPY_TO_REPO,
+                f"Copied {copied} files to {config.target_repo_path}",
+                level="success",
+            )
 
             # Phase 6: Git operations
+            await _phase_start(reporter, Phase.GIT_OPERATIONS, "Running git operations...")
             if config.branch_name:
                 from atc.infra.git import GitClient
 
@@ -190,8 +324,22 @@ async def execute_pipeline(config: RunConfig) -> None:
                 git.add_all()
                 git.commit(f"feat(atc): add generated feature files for Epic #{target.work_item_id}")
                 console.print(f"[bold]Committed to branch:[/bold] {config.branch_name}")
+                await _emit(
+                    reporter,
+                    Phase.GIT_OPERATIONS,
+                    f"Committed to branch: {config.branch_name}",
+                    level="success",
+                )
+            await _phase_end(reporter, Phase.GIT_OPERATIONS, "Git operations complete")
+        else:
+            if config.options.dry_run:
+                await _emit(reporter, Phase.COPY_TO_REPO, "Skipped (dry run)", level="warning")
+            elif not config.target_repo_path:
+                await _emit(reporter, Phase.COPY_TO_REPO, "No target repo configured", level="info")
+        await _phase_end(reporter, Phase.COPY_TO_REPO, "Copy phase complete")
 
     print_success("ATC pipeline complete!")
+    await _emit(reporter, Phase.GIT_OPERATIONS, "Pipeline complete!", level="success")
 
 
 def _get_feature_parent_id(ancestors: list["WorkItemNode"]) -> int | None:

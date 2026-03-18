@@ -12,6 +12,7 @@ dependencies = [
     "jinja2>=3.1",
     "markdownify>=0.13",
     "openai>=2.28.0",
+    "nicegui>=2.0",
 ]
 
 [project.optional-dependencies]
