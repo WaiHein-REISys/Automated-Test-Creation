@@ -1,0 +1,97 @@
+# Windsurf Cascade Rules — Automated Test Creation (ATC)
+
+You are assisting with the ATC tool which generates BDD/SpecFlow `.feature` files
+from Azure DevOps work items.
+
+## One-Command Full Workflow
+
+When the user asks you to "run ATC", "generate tests", or pastes an ADO URL, run
+the full pipeline with **zero follow-up questions** using the steps below.
+
+### Step 1 — Determine the run configuration
+
+Look for `cli/run.json`. If it exists, use it. If the user provided an ADO URL,
+override the url field with `--url`.
+
+If `cli/run.json` does not exist, run:
+```
+cd cli && python -m atc init
+```
+Then ask the user for the ADO URL and product name.
+
+### Step 2 — Run the pipeline (auto provider)
+
+If the user's `run.json` has a provider that is NOT `prompt_only` (e.g. `claude`,
+`azure_openai`), run the full pipeline:
+
+```bash
+# macOS / Linux:
+cd cli && ./run_atc.sh run --config run.json
+
+# Windows PowerShell:
+cd cli; .\run_atc.ps1 run --config run.json
+
+# Windows CMD:
+cd cli && run_atc.cmd run --config run.json
+```
+
+This fetches the ADO hierarchy, builds the workspace, renders prompts, generates
+`.feature` files via the configured AI provider, copies them to the target repo,
+and commits — all in one command.
+
+### Step 2 (alternative) — Run with prompt_only + Cascade generation
+
+If the provider is `prompt_only`, use a two-phase approach:
+
+**Phase A — Build workspace and prompts (dry run):**
+```bash
+cd cli && ./run_atc.sh run --config run.json --dry-run
+```
+
+**Phase B — Generate `.feature` files yourself:**
+For each `scenario_prompt.md` file in the workspace, read the prompt, generate
+the `.feature` file content following the SpecFlow rules in the prompt, and write
+it to the corresponding `Test Scenarios/` directory.
+
+The workspace structure is:
+```
+workspace/{product}/EPIC/Epic .../Features/Feat .../US... or PBI.../
+  scenario_prompt.md        ← read this
+  Test Scenarios/
+    US... or PBI....feature  ← write the generated content here
+```
+
+After generating all features, if `target_repo_path` is set in `run.json`, copy
+the `.feature` files to that repo path.
+
+### Step 3 — Report results
+
+Print a summary: how many items were processed, how many `.feature` files were
+generated, and where they were written.
+
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| Full pipeline | `./run_atc.sh run --config run.json` |
+| Dry run only | `./run_atc.sh run --config run.json --dry-run` |
+| Override URL | `./run_atc.sh run --config run.json --url "https://..."` |
+| Validate config | `./run_atc.sh validate --config run.json` |
+| Setup | `python setup_env.py` |
+| Init | `python -m atc init` |
+
+## Environment
+
+- Python 3.12 or 3.13 required
+- Dependencies managed via `cli/setup_env.py` (uses uv if available, pip otherwise)
+- ADO credentials in `cli/.env` (ATC_ADO_PAT required)
+- Run config in `cli/run.json`
+
+## Important Rules
+
+- Always use `python -m atc` or wrapper scripts, never `uv run atc`
+- The `.env` file contains secrets — never display PAT tokens or API keys
+- When generating `.feature` files manually (prompt_only mode), follow ALL
+  SpecFlow rules from `configs/reference/Instructions.txt`
+- Reuse steps from `configs/reference/Common_Steps.txt` and
+  `configs/reference/Background_Steps.txt` wherever applicable
