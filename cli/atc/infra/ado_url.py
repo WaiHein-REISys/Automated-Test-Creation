@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 from urllib.parse import urlparse
 
 from atc.core.models import AdoTarget
@@ -16,6 +17,7 @@ def parse_ado_url(url: str) -> AdoTarget:
         https://dev.azure.com/{org}/{project}/_backlogs/backlog/{team}/Epics/?workitem={id}
         https://{org}.visualstudio.com/{project}/_workitems/edit/{id}
         https://dev.azure.com/{org}/{project}/_queries/query/{guid}/?workitem={id}
+        https://{server}/{path}/{collection}/{project}/_workitems/edit/{id}  (on-prem ADS)
     """
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
@@ -39,11 +41,11 @@ def parse_ado_url(url: str) -> AdoTarget:
         org_url = f"https://dev.azure.com/{org}"
         work_item_id = _extract_work_item_id(url, path_parts, parsed.query)
 
+    # On-premises Azure DevOps Server (ADS):
+    # https://{server}/{vdir}/{collection}/{project}/_workitems/edit/{id}
     else:
-        raise ValueError(
-            f"Unrecognized ADO URL format: {url}. "
-            "Expected https://dev.azure.com/... or https://{{org}}.visualstudio.com/..."
-        )
+        org, org_url, project = _parse_on_prem_ads_url(url, parsed, path_parts)
+        work_item_id = _extract_work_item_id(url, path_parts, parsed.query)
 
     return AdoTarget(
         org=org,
@@ -51,6 +53,48 @@ def parse_ado_url(url: str) -> AdoTarget:
         project=project,
         work_item_id=work_item_id,
     )
+
+
+_ADO_PATH_MARKERS = {"_workitems", "_backlogs", "_queries", "_apis"}
+
+
+def _parse_on_prem_ads_url(
+    url: str, parsed: Any, path_parts: list[str]
+) -> tuple[str, str, str]:
+    """Extract (org, org_url, project) from an on-premises ADS URL.
+
+    Assumes the URL contains a known ADO path marker (e.g. ``_workitems``).
+    The segment immediately before the marker is the project, and everything
+    before that is the collection/org base URL.
+
+    Example:
+        https://ehbads.hrsa.gov/ads/EHBs/EHBs/_workitems/edit/411599
+          -> org="EHBs", org_url="https://ehbads.hrsa.gov/ads/EHBs", project="EHBs"
+    """
+    marker_idx: int | None = None
+    for i, part in enumerate(path_parts):
+        if part in _ADO_PATH_MARKERS:
+            marker_idx = i
+            break
+
+    if marker_idx is None or marker_idx < 2:
+        raise ValueError(
+            f"Cannot parse on-premises ADS URL: {url}. "
+            "Expected at least a collection and project segment before "
+            "an ADO path marker (e.g. _workitems)."
+        )
+
+    project = path_parts[marker_idx - 1]
+    org = path_parts[marker_idx - 2]  # collection name
+    # org_url = scheme://host + path segments up to (but not including) the project
+    prefix_parts = path_parts[: marker_idx - 1]
+    org_url = f"{parsed.scheme}://{parsed.hostname}"
+    if parsed.port and parsed.port not in (80, 443):
+        org_url += f":{parsed.port}"
+    if prefix_parts:
+        org_url += "/" + "/".join(prefix_parts)
+
+    return org, org_url, project
 
 
 def _extract_work_item_id(url: str, path_parts: list[str], query: str) -> int:
