@@ -4,11 +4,14 @@
 #   .\run_full.ps1                          # uses url from run.json
 #   .\run_full.ps1 -DryRun                  # workspace + prompts only
 #   .\run_full.ps1 -Url "..." -DryRun       # workspace + prompts for a specific URL
+#   .\run_full.ps1 -MaxDepth 2              # only fetch 2 levels below root
+#   .\run_full.ps1 -Url "..." -MaxDepth 1   # root + direct children only
 
 param(
     [string]$Url,
     [string]$Config = "run.json",
-    [switch]$DryRun
+    [switch]$DryRun,
+    [int]$MaxDepth = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +26,10 @@ if ($Url) {
 
 if ($DryRun) {
     $atcArgs += "--dry-run"
+}
+
+if ($MaxDepth -gt 0) {
+    $atcArgs += @("--max-depth", $MaxDepth)
 }
 
 # Delegate to the standard wrapper

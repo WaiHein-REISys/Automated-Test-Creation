@@ -16,7 +16,8 @@ param(
     [string]$AzureOpenAiApiVersion = "2024-12-01-preview",
     [string]$OllamaModel = "llama3",
     [string]$OllamaUrl = "http://localhost:11434",
-    [string]$CliAgentCommand = "windsurf generate --prompt {prompt_file}"
+    [string]$CliAgentCommand = "windsurf generate --prompt {prompt_file}",
+    [int]$MaxDepth = 0
 )
 
 Set-StrictMode -Version Latest
@@ -227,6 +228,12 @@ function Ensure-RunConfig {
     $config.target_repo_path = if ($TargetRepoPath) { $TargetRepoPath } else { $null }
     $config.branch_name = if ($BranchName) { $BranchName } else { $null }
     $config.provider = [pscustomobject](Get-ProviderConfig)
+
+    # Ensure options object exists and set max_depth
+    if (-not $config.options) {
+        $config | Add-Member -NotePropertyName "options" -NotePropertyValue ([pscustomobject]@{})
+    }
+    $config.options | Add-Member -NotePropertyName "max_depth" -NotePropertyValue $MaxDepth -Force
 
     $json = $config | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText($runConfigPath, $json + [Environment]::NewLine)

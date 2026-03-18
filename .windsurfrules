@@ -76,6 +76,7 @@ generated, and where they were written.
 | Full pipeline | `./run_atc.sh run --config run.json` |
 | Dry run only | `./run_atc.sh run --config run.json --dry-run` |
 | Override URL | `./run_atc.sh run --config run.json --url "https://..."` |
+| Limit depth | `./run_atc.sh run --config run.json --max-depth 2` |
 | Validate config | `./run_atc.sh validate --config run.json` |
 | Setup | `python setup_env.py` |
 | Init | `python -m atc init` |

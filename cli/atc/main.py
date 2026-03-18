@@ -42,17 +42,20 @@ def run(
     config: Annotated[Path, typer.Option("--config", "-c", help="Path to run config JSON file")] = Path("run.json"),
     url: Annotated[Optional[str], typer.Option("--url", "-u", help="ADO work item URL")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Simulate without making changes")] = False,
+    max_depth: Annotated[int, typer.Option("--max-depth", help="Max hierarchy depth (0 = unlimited)")] = 0,
 ) -> None:
     """Execute the ATC pipeline: fetch ADO items, generate feature files."""
     from atc.executor import execute_pipeline
 
     run_config = _load_config(config)
 
-    # CLI --url overrides config
+    # CLI flags override config
     if url:
         run_config.url = url
     if dry_run:
         run_config.options.dry_run = True
+    if max_depth:
+        run_config.options.max_depth = max_depth
 
     if not run_config.url:
         console.print("[red]Error: No ADO URL provided. Use --url or set 'url' in config.[/red]")
