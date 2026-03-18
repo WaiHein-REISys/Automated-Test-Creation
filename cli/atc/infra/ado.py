@@ -164,15 +164,39 @@ class AdoClient:
                     pass
         return child_ids
 
-    async def get_tree(self, root_id: int) -> WorkItemNode:
-        """Recursively fetch the full work item hierarchy."""
+    async def get_tree(self, root_id: int, *, max_depth: int = 0) -> WorkItemNode:
+        """Recursively fetch the work item hierarchy.
+
+        Args:
+            root_id: The root work item ID.
+            max_depth: Maximum levels below the root to fetch.
+                ``0`` means unlimited (full tree).
+                ``1`` fetches the root and its direct children only.
+                ``2`` fetches root → children → grandchildren, etc.
+        """
         root_item = await self.get_work_item(root_id)
         root_node = WorkItemNode(item=root_item)
-        await self._build_tree(root_node)
+        await self._build_tree(root_node, current_depth=1, max_depth=max_depth)
         return root_node
 
-    async def _build_tree(self, node: WorkItemNode) -> None:
-        """Recursively populate children for a node."""
+    async def _build_tree(
+        self,
+        node: WorkItemNode,
+        *,
+        current_depth: int = 1,
+        max_depth: int = 0,
+    ) -> None:
+        """Recursively populate children for a node.
+
+        Args:
+            node: The parent node to expand.
+            current_depth: How many levels deep we are (root's children = 1).
+            max_depth: Stop expanding beyond this depth. ``0`` = unlimited.
+        """
+        # Respect depth limit
+        if max_depth and current_depth > max_depth:
+            return
+
         child_ids: list[int] = []
         for rel in node.item.relations:
             if rel.rel == "System.LinkTypes.Hierarchy-Forward":
@@ -189,7 +213,11 @@ class AdoClient:
         for child_item in children:
             child_node = WorkItemNode(item=child_item)
             node.children.append(child_node)
-            await self._build_tree(child_node)
+            await self._build_tree(
+                child_node,
+                current_depth=current_depth + 1,
+                max_depth=max_depth,
+            )
 
     async def download_attachment(self, url: str, dest: Path) -> Path:
         """Download an attachment to a local path."""

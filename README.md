@@ -172,6 +172,7 @@ uv run python -m atc run --config run.json
     "dry_run": false,
     "download_attachments": true,
     "include_images_in_prompt": true,
+    "max_depth": 0,
     "generation_limit": 0,
     "generation_limit_per_feature": 0,
     "generation_only_ids": []
@@ -193,6 +194,7 @@ uv run python -m atc run --config run.json
 | `options.dry_run` | No | Skip AI generation, only build workspace and render prompts |
 | `options.download_attachments` | No | Download work item attachments to `references/` folders (default: `true`) |
 | `options.include_images_in_prompt` | No | Include image attachments in AI prompts for vision models (default: `true`) |
+| `options.max_depth` | No | Max hierarchy levels below the root to fetch. `0` = unlimited. `1` = root + direct children only. `2` = root + children + grandchildren, etc. |
 | `options.generation_limit` | No | Max total feature files to generate. `0` = unlimited (default: `0`) |
 | `options.generation_limit_per_feature` | No | Max feature files per Feature parent folder. `0` = unlimited (default: `0`) |
 | `options.generation_only_ids` | No | Only generate for these work item IDs. `[]` = all (default: `[]`) |

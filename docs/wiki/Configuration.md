@@ -47,9 +47,38 @@ The run config controls what to process and how. Create one with `python -m atc 
 | `options.dry_run` | No | `false` | Build workspace and render prompts but skip AI generation. |
 | `options.download_attachments` | No | `true` | Download work item attachments to `references/` folders. |
 | `options.include_images_in_prompt` | No | `true` | Include image attachments in AI prompts for vision-capable providers. |
+| `options.max_depth` | No | `0` | Max hierarchy levels below the root to traverse. `0` = unlimited (full tree). See [Hierarchy depth limit](#hierarchy-depth-limit). |
 | `options.generation_limit` | No | `0` | Max total `.feature` files to generate. `0` = unlimited. |
 | `options.generation_limit_per_feature` | No | `0` | Max `.feature` files per Feature parent. `0` = unlimited. |
 | `options.generation_only_ids` | No | `[]` | Only generate for these work item IDs. `[]` = all. |
+
+### Hierarchy depth limit
+
+`max_depth` controls how many levels of child work items are fetched below the root:
+
+| `max_depth` | Behavior |
+|-------------|----------|
+| `0` | **Unlimited** (default) — traverse the entire tree: Epic → Feature → User Story → sub-tasks, etc. |
+| `1` | Root + direct children only. E.g. if root is an Epic, fetch the Epic and its Features but stop there. |
+| `2` | Root + children + grandchildren. E.g. Epic → Features → User Stories, but not sub-tasks under stories. |
+| `3` | Three levels deep, and so on. |
+
+**Example — fetch only the first two levels:**
+
+```json
+{
+  "url": "https://ehbads.hrsa.gov/ads/EHBs/EHBs/_workitems/edit/411599",
+  "product_name": "EHB",
+  "options": {
+    "max_depth": 2
+  }
+}
+```
+
+This is useful when:
+- The hierarchy is very deep and you only need the top-level stories
+- You want a fast preview of the epic structure without fetching all leaves
+- The ADO server is slow and you want to reduce API calls
 
 ### Generation limits
 
