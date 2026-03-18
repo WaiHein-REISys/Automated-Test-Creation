@@ -22,6 +22,17 @@ class RunOptions(BaseModel):
     download_attachments: bool = True
     include_images_in_prompt: bool = True
 
+    # Hierarchy depth limit (0 = unlimited)
+    max_depth: int = Field(
+        default=0,
+        description=(
+            "Maximum hierarchy depth to traverse below the root work item. "
+            "0 = unlimited (fetch the full tree). "
+            "1 = root + its direct children only. "
+            "2 = root + children + grandchildren, etc."
+        ),
+    )
+
     # Generation limits (0 = unlimited, empty list = all)
     generation_limit: int = Field(
         default=0, description="Max total feature files to generate (0 = unlimited)"

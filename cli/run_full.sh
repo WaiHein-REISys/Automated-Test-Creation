@@ -5,6 +5,8 @@
 #   ./run_full.sh                            # uses url from run.json
 #   ./run_full.sh --dry-run                  # workspace + prompts only
 #   ./run_full.sh --url "..." --dry-run      # workspace + prompts for a specific URL
+#   ./run_full.sh --max-depth 2              # only fetch 2 levels below root
+#   ./run_full.sh --url "..." --max-depth 1  # root + direct children only
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

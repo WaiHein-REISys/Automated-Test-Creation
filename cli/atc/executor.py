@@ -90,8 +90,11 @@ async def execute_pipeline(
 
     _check_cancel(cancel_event)
     async with AdoClient(target.org_url, target.project, pat, api_version=api_version) as ado:
+        max_depth = config.options.max_depth
+        if max_depth:
+            print_status(f"Hierarchy depth limit: {max_depth} level(s) below root")
         print_status("Fetching work item hierarchy...")
-        tree = await ado.get_tree(target.work_item_id)
+        tree = await ado.get_tree(target.work_item_id, max_depth=max_depth)
 
         from atc.output.console import print_tree
 
