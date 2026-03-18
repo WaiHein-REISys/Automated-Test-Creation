@@ -5,6 +5,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Ensure the atc package is importable even if the editable .pth has a stale
+# absolute path (e.g. after the repo was moved).
+export PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
 # Prefer uv if available
 if command -v uv &>/dev/null; then

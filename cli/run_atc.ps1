@@ -3,6 +3,11 @@
 #        .\run_atc.ps1 run --config run.json --dry-run
 
 $ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
+
+# Ensure the atc package is importable even if the editable .pth has a stale path
+$env:PYTHONPATH = "$PSScriptRoot" + [IO.Path]::PathSeparator + $env:PYTHONPATH
+
 $supportedPyLauncherVersions = @("3.13", "3.12")
 $supportedPythonMessage = "Python 3.12 or 3.13"
 
