@@ -115,6 +115,17 @@ class RunOptions(BaseModel):
         ),
     )
 
+    # Story completeness filter
+    skip_incomplete_stories: bool = Field(
+        default=False,
+        description=(
+            "Skip user stories that lack the minimum context needed to "
+            "generate a feature file.  A story is considered incomplete "
+            "when its description and acceptance criteria are missing any "
+            "of: user/actor, goal/action, or benefit/purpose."
+        ),
+    )
+
     # Generation limits (0 = unlimited, empty list = all)
     generation_limit: int = Field(
         default=0, description="Max total feature files to generate (0 = unlimited)"

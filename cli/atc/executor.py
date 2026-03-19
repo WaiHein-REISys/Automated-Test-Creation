@@ -145,7 +145,21 @@ async def execute_pipeline(
         from atc.infra.prompts import PromptRenderer
 
         renderer = PromptRenderer()
-        story_nodes = _find_leaf_stories(tree)
+        if config.options.skip_incomplete_stories:
+            print_status(
+                "Story completeness filter enabled — "
+                "skipping stories missing user/goal/benefit"
+            )
+            await _emit(
+                reporter,
+                Phase.RENDER_PROMPTS,
+                "Story completeness filter enabled — "
+                "stories missing user/goal/benefit will be skipped",
+                level="warning",
+            )
+        story_nodes = _find_leaf_stories(
+            tree, skip_incomplete=config.options.skip_incomplete_stories,
+        )
         prompts_rendered = 0
 
         # Store bundles for Phase 4 generation
@@ -534,18 +548,47 @@ _LEAF_TYPES = {"User Story", "Product Backlog Item", "Task"}
 
 def _find_leaf_stories(
     root: "WorkItemNode",
+    *,
+    skip_incomplete: bool = False,
 ) -> list[tuple["WorkItemNode", list["WorkItemNode"]]]:
-    """Find leaf work item nodes (User Story, PBI, Task) with their ancestor chain."""
-    from atc.core.models import WorkItemNode
+    """Find leaf work item nodes (User Story, PBI, Task) with their ancestor chain.
+
+    When *skip_incomplete* is True, stories whose description and acceptance
+    criteria lack a user/actor, goal/action, or benefit/purpose are excluded
+    and logged to the console.
+    """
+    from atc.core.models import StoryCompletenessResult, WorkItemNode, check_story_completeness
 
     results: list[tuple[WorkItemNode, list[WorkItemNode]]] = []
+    skipped: list[tuple[WorkItemNode, StoryCompletenessResult]] = []
 
     def _walk(node: WorkItemNode, ancestors: list[WorkItemNode]) -> None:
         if node.work_item_type in _LEAF_TYPES:
+            if skip_incomplete:
+                result = check_story_completeness(
+                    node.item.description,
+                    node.item.acceptance_criteria,
+                    has_attachments=bool(node.item.attachments),
+                )
+                if not result.is_generatable:
+                    skipped.append((node, result))
+                    return
             results.append((node, list(ancestors)))
         else:
             for child in node.children:
                 _walk(child, ancestors + [node])
 
     _walk(root, [])
+
+    if skipped:
+        from atc.output.console import console
+
+        console.print(
+            f"\n[yellow]Skipped {len(skipped)} item(s) — "
+            f"incomplete story (missing user/goal/benefit):[/yellow]"
+        )
+        for node, result in skipped:
+            missing = ", ".join(result.missing)
+            console.print(f"  [yellow]• #{node.id} — {node.title}  (missing: {missing})[/yellow]")
+
     return results

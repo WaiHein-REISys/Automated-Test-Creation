@@ -240,6 +240,17 @@ def render() -> None:
                         "options", "include_images_in_prompt", e.value
                     ),
                 )
+                ui.switch(
+                    "Skip Incomplete Stories",
+                    value=options_data.get("skip_incomplete_stories", False),
+                    on_change=lambda e: _update_nested(
+                        "options", "skip_incomplete_stories", e.value
+                    ),
+                ).tooltip(
+                    "Skip stories that lack the minimum context for feature "
+                    "generation — must contain a user/actor, goal/action, "
+                    "and benefit/purpose"
+                )
 
                 ui.number(
                     "Max Hierarchy Depth (0 = unlimited)",
