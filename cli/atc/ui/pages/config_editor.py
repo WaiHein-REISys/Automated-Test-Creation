@@ -252,6 +252,19 @@ def render() -> None:
                     ),
                 )
 
+                ui.input(
+                    "Filter Tags (comma-separated, empty = fetch all children)",
+                    value=", ".join(options_data.get("filter_tags", [])),
+                    placeholder="e.g. Automated, SF424, PriorApproval",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_nested(
+                        "options",
+                        "filter_tags",
+                        _parse_tag_list(e.sender.value),
+                    ),
+                )
+
                 gen_limit = ui.number(
                     "Generation Limit (0 = unlimited)",
                     value=options_data.get("generation_limit", 0),
@@ -427,6 +440,13 @@ def _parse_id_list(text: str) -> list[int]:
         return [int(x.strip()) for x in text.split(",") if x.strip()]
     except ValueError:
         return []
+
+
+def _parse_tag_list(text: str) -> list[str]:
+    """Parse a comma-separated list of tag strings."""
+    if not text.strip():
+        return []
+    return [t.strip() for t in text.split(",") if t.strip()]
 
 
 def _load_config(path_str: str) -> None:

@@ -13,6 +13,7 @@
     "download_attachments": true,
     "include_images_in_prompt": true,
     "max_depth": 0,
+    "filter_tags": [],
     "test_execution": {
       "enabled": false,
       "tag": "",

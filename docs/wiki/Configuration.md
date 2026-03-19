@@ -32,9 +32,17 @@ The run config controls what to process and how. Create one with `python -m atc 
     "download_attachments": true,
     "include_images_in_prompt": true,
     "max_depth": 0,
+    "filter_tags": [],
     "generation_limit": 0,
     "generation_limit_per_feature": 0,
-    "generation_only_ids": []
+    "generation_only_ids": [],
+    "test_execution": {
+      "enabled": false,
+      "tag": "",
+      "filter_expr": "",
+      "config": "Release",
+      "auto_build": true
+    }
   }
 }
 ```
@@ -57,9 +65,15 @@ The run config controls what to process and how. Create one with `python -m atc 
 | `options.download_attachments` | No | `true` | Download work item attachments to `references/` folders. |
 | `options.include_images_in_prompt` | No | `true` | Include image attachments in AI prompts for vision-capable providers. |
 | `options.max_depth` | No | `0` | Max hierarchy levels below the root to traverse. `0` = unlimited (full tree). See [Hierarchy depth limit](#hierarchy-depth-limit). |
+| `options.filter_tags` | No | `[]` | Only include child work items with at least one of these ADO tags (case-insensitive). `[]` = no filtering. See [Tag-based filtering](#tag-based-filtering). |
 | `options.generation_limit` | No | `0` | Max total `.feature` files to generate. `0` = unlimited. |
 | `options.generation_limit_per_feature` | No | `0` | Max `.feature` files per Feature parent. `0` = unlimited. |
 | `options.generation_only_ids` | No | `[]` | Only generate for these work item IDs. `[]` = all. |
+| `options.test_execution.enabled` | No | `false` | Run generated tests after the pipeline completes. See [Test execution](#test-execution). |
+| `options.test_execution.tag` | No | `""` | SpecFlow tag for test filtering (e.g. `"Automated"`). |
+| `options.test_execution.filter_expr` | No | `""` | Raw `dotnet test --filter` expression (overrides tag). |
+| `options.test_execution.config` | No | `"Release"` | Build configuration (`Release` or `Debug`). |
+| `options.test_execution.auto_build` | No | `true` | Build the project before running tests. |
 
 ### Hierarchy depth limit
 
@@ -88,6 +102,73 @@ This is useful when:
 - The hierarchy is very deep and you only need the top-level stories
 - You want a fast preview of the epic structure without fetching all leaves
 - The ADO server is slow and you want to reduce API calls
+
+### Tag-based filtering
+
+`filter_tags` lets you prune the work item hierarchy during fetch, keeping only child items that have at least one of the specified ADO tags. The root item is always included regardless of its tags.
+
+- Tags are matched **case-insensitively** against the ADO `System.Tags` field.
+- An empty list (`[]`) means no filtering — all children are fetched (default).
+- Can be combined with `max_depth` for even more precise control.
+
+**Example — only fetch items tagged "Automated" or "SF424":**
+
+```json
+{
+  "url": "https://ehbads.hrsa.gov/ads/EHBs/EHBs/_workitems/edit/411599",
+  "product_name": "EHB",
+  "options": {
+    "filter_tags": ["Automated", "SF424"]
+  }
+}
+```
+
+**CLI usage:**
+```bash
+./run_atc.sh run --config run.json --filter-tag Automated --filter-tag SF424
+```
+
+**PowerShell:**
+```powershell
+.\run_full.ps1 -FilterTags "Automated","SF424"
+```
+
+This is useful when:
+- The hierarchy has many work items but you only want a subset tagged for automation
+- Different teams tag items for different test suites
+- You want to generate tests incrementally by tag
+
+### Test execution
+
+When `test_execution.enabled` is `true`, the pipeline adds a **Run Tests** phase after git operations. It uses the standalone EHB Test Runner (`cli/tools/ehb_test_runner.py`) to execute tests via `dotnet test`.
+
+**Key detail:** `target_repo_path` is reused as the `--project` path for the test runner — it should point to the EHB2010 root directory containing `EHB.UI.Automation/`.
+
+**Example:**
+```json
+{
+  "target_repo_path": "C:/Repos/EHB2010",
+  "options": {
+    "test_execution": {
+      "enabled": true,
+      "tag": "Automated",
+      "config": "Release",
+      "auto_build": true
+    }
+  }
+}
+```
+
+**CLI usage:**
+```bash
+./run_atc.sh run --config run.json --run-tests --test-tag Automated
+```
+
+**Results:**
+- TRX files are written to `./TestResults/` (or `results_dir` if specified)
+- ExtentReport HTML is at `{project}/EHB.UI.Automation/bin/{config}/net8.0/Reports/ExtentReport.html`
+- The UI pipeline page shows pass/fail counts and expandable failed test details
+- Zero external dependencies beyond Python stdlib and .NET SDK
 
 ### Inline credentials
 

@@ -8,12 +8,14 @@
 #   .\run_full.ps1 -Url "..." -MaxDepth 1   # root + direct children only
 #   .\run_full.ps1 -RunTests                # run tests after pipeline completes
 #   .\run_full.ps1 -RunTests -TestTag "Automated"  # run tests by SpecFlow tag
+#   .\run_full.ps1 -FilterTags "Automated","SF424"  # only include items with these tags
 
 param(
     [string]$Url,
     [string]$Config = "run.json",
     [switch]$DryRun,
     [int]$MaxDepth = 0,
+    [string[]]$FilterTags,
     [switch]$RunTests,
     [string]$TestTag,
     [string]$TestFilter
@@ -35,6 +37,12 @@ if ($DryRun) {
 
 if ($MaxDepth -gt 0) {
     $atcArgs += @("--max-depth", $MaxDepth)
+}
+
+if ($FilterTags) {
+    foreach ($tag in $FilterTags) {
+        $atcArgs += @("--filter-tag", $tag)
+    }
 }
 
 if ($RunTests) {

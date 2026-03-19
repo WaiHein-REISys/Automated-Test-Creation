@@ -9,6 +9,7 @@
 #   ./run_full.sh --url "..." --max-depth 1  # root + direct children only
 #   ./run_full.sh --run-tests                # run tests after pipeline completes
 #   ./run_full.sh --run-tests --test-tag Automated  # run tests by SpecFlow tag
+#   ./run_full.sh --filter-tag Automated --filter-tag SF424  # tag-based child filtering
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

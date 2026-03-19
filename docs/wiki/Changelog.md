@@ -4,6 +4,36 @@ Notable changes, enhancements, and additions to ATC. Organized by date with the 
 
 ---
 
+## 2026-03-19
+
+### Tag-based filtering for work item hierarchy (`filter_tags`)
+
+**Files changed:** `cli/atc/infra/config.py`, `cli/atc/infra/ado.py`, `cli/atc/executor.py`, `cli/atc/main.py`, `cli/atc/ui/pages/config_editor.py`, `cli/run_full.ps1`, `cli/run_full.sh`, `cli/configs/runs/example.json`, `.windsurfrules`
+
+Added `options.filter_tags` to prune the work item hierarchy during fetch, keeping only child items that have at least one matching ADO tag:
+
+- Tags matched case-insensitively against `System.Tags`
+- Root item always included regardless of tags
+- Empty list = no filtering (default behavior preserved)
+- Can be combined with `max_depth` for precise control
+
+**New config field:**
+```json
+{
+  "options": {
+    "filter_tags": ["Automated", "SF424"]
+  }
+}
+```
+
+**New CLI flag:** `--filter-tag <tag>` (repeatable)
+
+**New PowerShell flag:** `-FilterTags "Automated","SF424"`
+
+**UI:** Config editor has a "Filter Tags" input field (comma-separated)
+
+---
+
 ## 2026-03-18
 
 ### Test execution integration (EHB Test Runner)

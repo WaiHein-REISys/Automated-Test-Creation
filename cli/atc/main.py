@@ -43,6 +43,7 @@ def run(
     url: Annotated[Optional[str], typer.Option("--url", "-u", help="ADO work item URL")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Simulate without making changes")] = False,
     max_depth: Annotated[int, typer.Option("--max-depth", help="Max hierarchy depth (0 = unlimited)")] = 0,
+    filter_tags: Annotated[Optional[list[str]], typer.Option("--filter-tag", help="Only include children with these ADO tags (repeatable)")] = None,
     run_tests: Annotated[bool, typer.Option("--run-tests", help="Run generated tests after pipeline completes")] = False,
     test_tag: Annotated[Optional[str], typer.Option("--test-tag", help="SpecFlow tag for test execution")] = None,
     test_filter: Annotated[Optional[str], typer.Option("--test-filter", help="dotnet test filter expression")] = None,
@@ -59,6 +60,8 @@ def run(
         run_config.options.dry_run = True
     if max_depth:
         run_config.options.max_depth = max_depth
+    if filter_tags:
+        run_config.options.filter_tags = filter_tags
     if run_tests:
         run_config.options.test_execution.enabled = True
     if test_tag:
