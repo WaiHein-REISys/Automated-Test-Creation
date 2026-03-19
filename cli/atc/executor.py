@@ -50,12 +50,18 @@ async def execute_pipeline(
     cancel_event: asyncio.Event | None = None,
 ) -> None:
     """Main pipeline: ingest → workspace → prompt → generate → copy → git."""
-    settings = AtcSettings()
+    from atc.infra.settings import resolve_settings
+
+    base_settings = AtcSettings()
+    settings = resolve_settings(base_settings, config.credentials)
     pat = settings.ado_pat.get_secret_value()
 
     if not pat:
-        print_error("ATC_ADO_PAT environment variable is not set.")
-        await _emit(reporter, Phase.PARSE_URL, "ATC_ADO_PAT is not set", level="error")
+        print_error(
+            "ADO PAT is not set. Provide it via ATC_ADO_PAT env var, "
+            ".env file, or the 'credentials.ado_pat' field in run.json."
+        )
+        await _emit(reporter, Phase.PARSE_URL, "ADO PAT is not set", level="error")
         return
 
     print_status(f"Starting ATC pipeline for: {config.url}")
@@ -135,17 +141,32 @@ async def execute_pipeline(
         story_nodes = _find_leaf_stories(tree)
         prompts_rendered = 0
 
+        # Store bundles for Phase 4 generation
+        prompt_bundles: dict[int, "PromptBundle"] = {}
+
         for i, (story_node, ancestors) in enumerate(story_nodes, 1):
             paths = manifest.get_paths(story_node.id)
             if not paths or not paths.prompt_path:
                 continue
 
-            prompt = renderer.render_scenario_prompt(
+            from atc.core.models import PromptBundle
+
+            bundle = renderer.render_scenario_prompt(
                 story=story_node.item,
                 ancestors=ancestors,
                 images=[a for a in story_node.item.attachments if a.local_path],
+                product_name=config.product_name,
             )
-            paths.prompt_path.write_text(prompt, encoding="utf-8")
+            prompt_bundles[story_node.id] = bundle
+
+            # Save combined prompt for human review
+            paths.prompt_path.write_text(bundle.combined, encoding="utf-8")
+
+            # Also save split files for inspection
+            system_path = paths.prompt_path.parent / "system_prompt.md"
+            user_path = paths.prompt_path.parent / "user_prompt.md"
+            system_path.write_text(bundle.system_message, encoding="utf-8")
+            user_path.write_text(bundle.user_message, encoding="utf-8")
             prompts_rendered += 1
             if reporter:
                 await reporter.item_progress(
@@ -257,7 +278,23 @@ async def execute_pipeline(
                     total=total,
                 )
 
-                prompt = paths.prompt_path.read_text(encoding="utf-8")
+                # Use the PromptBundle if available, fall back to flat file
+                bundle = prompt_bundles.get(story_node.id)
+                if bundle is None:
+                    # Reconstruct from saved split files
+                    sys_path = paths.prompt_path.parent / "system_prompt.md"
+                    usr_path = paths.prompt_path.parent / "user_prompt.md"
+                    if sys_path.exists() and usr_path.exists():
+                        from atc.core.models import PromptBundle
+
+                        bundle = PromptBundle(
+                            system_message=sys_path.read_text(encoding="utf-8"),
+                            user_message=usr_path.read_text(encoding="utf-8"),
+                        )
+                    else:
+                        # Legacy: single prompt file
+                        bundle = paths.prompt_path.read_text(encoding="utf-8")
+
                 images = [
                     a.local_path
                     for a in item.attachments
@@ -265,7 +302,7 @@ async def execute_pipeline(
                 ]
 
                 try:
-                    content = await provider.generate(prompt, images)
+                    content = await provider.generate(bundle, images)
                 except Exception as e:
                     failed += 1
                     msg = f"Failed: {label} — {e}"

@@ -86,6 +86,25 @@ class AdoTarget:
 
 
 @dataclass
+class PromptBundle:
+    """Multi-stage prompt: system (generic + tailored) + user (story-specific).
+
+    system_message: Generic SpecFlow rules + product-specific context.
+                    Sent as the system/developer message to the LLM.
+    user_message:   The actual user story content to generate from.
+                    Sent as the user message to the LLM.
+    """
+
+    system_message: str
+    user_message: str
+
+    @property
+    def combined(self) -> str:
+        """Fallback: merge both parts for providers that only accept a single prompt."""
+        return f"{self.system_message}\n\n---\n\n{self.user_message}"
+
+
+@dataclass
 class WorkspacePaths:
     """Paths for a single work item in the workspace."""
 

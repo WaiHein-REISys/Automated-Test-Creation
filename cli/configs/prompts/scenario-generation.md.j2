@@ -1,44 +1,21 @@
-{{ instructions }}
+Generate a .feature file for the following user story.
 
----
-
-## Context
-
-**Epic:** {{ epic_title }}
-{% if feature_title %}**Feature:** {{ feature_title }}{% endif %}
-
----
-
-## User Story
-
-**ID:** {{ story_id }}
+**Work Item ID:** {{ story_id }}
 **Title:** {{ story_title }}
+**Type:** {{ story_type }}
 
 ### Description
+
 {{ story_description }}
 
 ### Acceptance Criteria
+
 {{ story_acceptance_criteria }}
 
----
-
-## Reference: Common Steps
-Use these existing step definitions when applicable instead of creating new steps:
-
-```gherkin
-{{ common_steps }}
-```
-
-## Reference: Background Steps
-Use these navigation steps as Background when applicable:
-
-```gherkin
-{{ background_steps }}
-```
-
 {% if image_paths %}
-## Attached Images
-The following images are attached to this user story for additional context:
+### Attached Images
+
+The following images provide additional UI context:
 {% for img in image_paths %}
 - {{ img }}
 {% endfor %}
@@ -46,4 +23,5 @@ The following images are attached to this user story for additional context:
 
 ---
 
-Generate the `.feature` file now. Use tag @US:{{ story_id }} for all generated scenarios.
+Generate the complete .feature file now. Tag every scenario with @US:{{ story_id }} and @AIGenerated.
+Output ONLY the .feature file content — no explanations, no markdown fences.

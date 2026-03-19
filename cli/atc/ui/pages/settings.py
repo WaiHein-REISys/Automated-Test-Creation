@@ -8,9 +8,38 @@ from pathlib import Path
 from nicegui import ui
 
 
+def _load_resolved_settings() -> dict[str, str]:
+    """Load settings from .env + environment using Pydantic, returning resolved values.
+
+    This ensures the UI displays what the pipeline will actually use,
+    including values from .env that are NOT in ``os.environ``.
+    """
+    from atc.infra.settings import AtcSettings
+
+    try:
+        s = AtcSettings()
+    except Exception:
+        return {}
+
+    return {
+        "ATC_ADO_PAT": s.ado_pat.get_secret_value(),
+        "ATC_ADO_API_VERSION": s.ado_api_version,
+        "ATC_ANTHROPIC_API_KEY": s.anthropic_api_key.get_secret_value(),
+        "ATC_AZURE_OPENAI_ENDPOINT": s.azure_openai_endpoint,
+        "ATC_AZURE_OPENAI_API_KEY": s.azure_openai_api_key.get_secret_value(),
+        "ATC_AZURE_OPENAI_DEPLOYMENT": s.azure_openai_deployment,
+        "ATC_AZURE_OPENAI_API_VERSION": s.azure_openai_api_version,
+        "ATC_OLLAMA_URL": s.ollama_url,
+        "ATC_OLLAMA_MODEL": s.ollama_model,
+        "ATC_CLI_AGENT_CMD": s.cli_agent_cmd,
+    }
+
+
 def render() -> None:
     """Render the settings page."""
     ui.label("Settings").classes("text-3xl font-bold")
+
+    resolved = _load_resolved_settings()
 
     # Environment file
     with ui.card().classes("w-full"):
@@ -30,7 +59,7 @@ def render() -> None:
     with ui.card().classes("w-full"):
         ui.label("Azure DevOps").classes("font-semibold text-blue-400")
 
-        ado_pat = os.environ.get("ATC_ADO_PAT", "")
+        ado_pat = resolved.get("ATC_ADO_PAT", "")
         pat_input = ui.input(
             "ADO Personal Access Token (ATC_ADO_PAT)",
             value="***" if ado_pat else "",
@@ -56,7 +85,7 @@ def render() -> None:
 
         # Claude / Anthropic
         with ui.expansion("Anthropic (Claude)", icon="smart_toy").classes("w-full"):
-            anthropic_key = os.environ.get("ATC_ANTHROPIC_API_KEY", "")
+            anthropic_key = resolved.get("ATC_ANTHROPIC_API_KEY", "")
             anthropic_input = ui.input(
                 "Anthropic API Key (ATC_ANTHROPIC_API_KEY)",
                 value="***" if anthropic_key else "",
@@ -71,9 +100,9 @@ def render() -> None:
 
         # Azure OpenAI
         with ui.expansion("Azure OpenAI", icon="cloud").classes("w-full"):
-            az_endpoint = os.environ.get("ATC_AZURE_OPENAI_ENDPOINT", "")
-            az_key = os.environ.get("ATC_AZURE_OPENAI_API_KEY", "")
-            az_deployment = os.environ.get("ATC_AZURE_OPENAI_DEPLOYMENT", "")
+            az_endpoint = resolved.get("ATC_AZURE_OPENAI_ENDPOINT", "")
+            az_key = resolved.get("ATC_AZURE_OPENAI_API_KEY", "")
+            az_deployment = resolved.get("ATC_AZURE_OPENAI_DEPLOYMENT", "")
 
             az_endpoint_input = ui.input(
                 "Endpoint (ATC_AZURE_OPENAI_ENDPOINT)",
@@ -102,8 +131,8 @@ def render() -> None:
 
         # Ollama
         with ui.expansion("Ollama (Local)", icon="computer").classes("w-full"):
-            ollama_url = os.environ.get("ATC_OLLAMA_URL", "http://localhost:11434")
-            ollama_model = os.environ.get("ATC_OLLAMA_MODEL", "llama3")
+            ollama_url = resolved.get("ATC_OLLAMA_URL", "http://localhost:11434")
+            ollama_model = resolved.get("ATC_OLLAMA_MODEL", "llama3")
 
             ollama_url_input = ui.input(
                 "Ollama URL (ATC_OLLAMA_URL)",
@@ -126,6 +155,9 @@ def render() -> None:
     # Current environment status
     with ui.card().classes("w-full"):
         ui.label("Environment Status").classes("font-semibold text-blue-400")
+        ui.label(
+            "Shows resolved values from environment variables and .env file."
+        ).classes("text-xs text-slate-400 mb-1")
 
         env_vars = [
             ("ATC_ADO_PAT", "Required"),
@@ -140,7 +172,7 @@ def render() -> None:
         ]
 
         for var_name, purpose in env_vars:
-            value = os.environ.get(var_name)
+            value = resolved.get(var_name, "")
             with ui.row().classes("items-center gap-2"):
                 if value:
                     ui.icon("check_circle").classes("text-green-400 text-sm")
@@ -171,7 +203,7 @@ def _save_env_var(key: str, value: str) -> None:
 
 
 def _save_multiple_env(vars: dict[str, str]) -> None:
-    """Save multiple environment variables to .env file."""
+    """Save multiple environment variables to .env file and update os.environ."""
     env_path = Path(".env")
 
     # Read existing
@@ -188,11 +220,16 @@ def _save_multiple_env(vars: dict[str, str]) -> None:
                 existing[k.strip()] = v
 
     # Update
+    saved_count = 0
     for key, value in vars.items():
         if value and value != "***":
             existing[key] = value
+            # Also update os.environ so the running process sees the change
+            # immediately (e.g. when executor creates AtcSettings())
+            os.environ[key] = value
+            saved_count += 1
 
     # Write back with proper quoting
     lines = [f'{k}="{v}"' for k, v in sorted(existing.items())]
     env_path.write_text("\n".join(lines) + "\n")
-    ui.notify(f"Saved {len(vars)} variable(s) to .env", type="positive")
+    ui.notify(f"Saved {saved_count} variable(s) to .env", type="positive")

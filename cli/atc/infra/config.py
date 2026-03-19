@@ -7,6 +7,36 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 
+class CredentialsConfig(BaseModel):
+    """Optional credentials that can be stored in run.json.
+
+    Values here take priority over environment variables / ``.env``.
+    Leave a field empty to fall back to the corresponding ``ATC_*`` env var.
+
+    .. warning::
+       Storing secrets in JSON files is convenient but less secure than
+       environment variables.  Make sure ``run.json`` is in ``.gitignore``.
+    """
+
+    ado_pat: str = Field(default="", description="Azure DevOps Personal Access Token")
+
+    # Claude / Anthropic
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+
+    # Azure OpenAI
+    azure_openai_endpoint: str = Field(default="", description="Azure OpenAI endpoint URL")
+    azure_openai_api_key: str = Field(default="", description="Azure OpenAI API key")
+    azure_openai_deployment: str = Field(default="", description="Azure OpenAI deployment name")
+    azure_openai_api_version: str = Field(default="", description="Azure OpenAI API version")
+
+    # Ollama
+    ollama_url: str = Field(default="", description="Ollama server URL")
+    ollama_model: str = Field(default="", description="Ollama model name")
+
+    # CLI Agent
+    cli_agent_cmd: str = Field(default="", description="CLI agent command template")
+
+
 class ProviderConfig(BaseModel):
     """AI provider configuration."""
 
@@ -63,6 +93,13 @@ class RunConfig(BaseModel):
             "Azure DevOps REST API version. "
             "'auto' probes the server and picks the best supported version (7.1, 7.0, 6.0). "
             "Set explicitly (e.g. '7.0') for on-prem servers that reject newer versions."
+        ),
+    )
+    credentials: CredentialsConfig = Field(
+        default_factory=CredentialsConfig,
+        description=(
+            "Optional inline credentials.  Values set here override "
+            "environment variables and .env.  Leave empty to use env vars."
         ),
     )
     provider: ProviderConfig = Field(default_factory=ProviderConfig)

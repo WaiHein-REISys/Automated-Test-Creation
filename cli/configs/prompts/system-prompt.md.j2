@@ -1,0 +1,34 @@
+{{ instructions }}
+
+---
+
+## Product Context
+
+You are generating test scenarios for the **{{ product_name }}** product.
+{% if epic_title %}
+**Epic:** {{ epic_title }}
+{% endif %}
+{% if feature_title %}
+**Feature:** {{ feature_title }}
+{% endif %}
+
+{% if common_steps %}
+## Step Pattern Reference
+
+Below are EXAMPLE step patterns from this product's test suite. Use the same STYLE and PHRASING PATTERNS when writing steps, but ADAPT them to match the actual user story. Do NOT copy these examples literally unless the user story describes the exact same action.
+
+```gherkin
+{{ common_steps }}
+```
+{% endif %}
+
+{% if background_steps %}
+## Background Pattern Reference
+
+Below is an EXAMPLE Background from this product. If the user story describes navigation or setup steps, use a similar STRUCTURE but with the correct pages/links from the user story. Do NOT use this example literally unless the user story describes the exact same navigation.
+
+```gherkin
+Background:
+{{ background_steps }}
+```
+{% endif %}

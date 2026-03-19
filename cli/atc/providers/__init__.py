@@ -17,7 +17,8 @@ def create_provider(config: ProviderConfig, settings: AtcSettings) -> Generation
         api_key = settings.anthropic_api_key.get_secret_value()
         if not api_key:
             raise ValueError(
-                "ATC_ANTHROPIC_API_KEY environment variable is required for the Claude provider."
+                "Anthropic API key is required for the Claude provider. "
+                "Set ATC_ANTHROPIC_API_KEY env var or credentials.anthropic_api_key in run.json."
             )
         model = config.model or "claude-sonnet-4-20250514"
         return ClaudeProvider(api_key=api_key, model=model)
@@ -35,18 +36,18 @@ def create_provider(config: ProviderConfig, settings: AtcSettings) -> Generation
 
         if not endpoint:
             raise ValueError(
-                "Azure OpenAI endpoint is required. Set ATC_AZURE_OPENAI_ENDPOINT "
-                "or provider.options.endpoint in run.json."
+                "Azure OpenAI endpoint is required. Set ATC_AZURE_OPENAI_ENDPOINT, "
+                "credentials.azure_openai_endpoint, or provider.options.endpoint in run.json."
             )
         if not api_key:
             raise ValueError(
-                "ATC_AZURE_OPENAI_API_KEY environment variable is required "
-                "for the Azure OpenAI provider."
+                "Azure OpenAI API key is required. Set ATC_AZURE_OPENAI_API_KEY env var "
+                "or credentials.azure_openai_api_key in run.json."
             )
         if not deployment:
             raise ValueError(
-                "Azure OpenAI deployment name is required. Set ATC_AZURE_OPENAI_DEPLOYMENT "
-                "or provider.model in run.json."
+                "Azure OpenAI deployment name is required. Set ATC_AZURE_OPENAI_DEPLOYMENT, "
+                "credentials.azure_openai_deployment, or provider.model in run.json."
             )
         return AzureOpenAIProvider(
             endpoint=endpoint,

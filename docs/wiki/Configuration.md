@@ -20,10 +20,18 @@ The run config controls what to process and how. Create one with `python -m atc 
     "model": "claude-sonnet-4-20250514",
     "options": {}
   },
+  "credentials": {
+    "ado_pat": "",
+    "anthropic_api_key": "",
+    "azure_openai_endpoint": "",
+    "azure_openai_api_key": "",
+    "azure_openai_deployment": ""
+  },
   "options": {
     "dry_run": false,
     "download_attachments": true,
     "include_images_in_prompt": true,
+    "max_depth": 0,
     "generation_limit": 0,
     "generation_limit_per_feature": 0,
     "generation_only_ids": []
@@ -41,6 +49,7 @@ The run config controls what to process and how. Create one with `python -m atc 
 | `target_repo_path` | No | `null` | Path to the target automation repo. If set, generated `.feature` files are copied there after generation. |
 | `branch_name` | No | `null` | Git branch name. If set along with `target_repo_path`, ATC creates/switches to this branch and commits generated files. |
 | `ado_api_version` | No | `auto` | Azure DevOps REST API version. `"auto"` probes the server (tries 7.1 → 7.0 → 6.0). Set explicitly (e.g. `"7.0"`) for on-prem servers that reject newer versions. |
+| `credentials` | No | `{}` | Inline credentials. Values override env vars / `.env`. See [Inline credentials](#inline-credentials). |
 | `provider.type` | No | `prompt_only` | AI provider: `claude`, `azure_openai`, `ollama`, `cli_agent`, or `prompt_only`. See [Providers](Providers.md). |
 | `provider.model` | No | varies | Model name or deployment name. Depends on provider. |
 | `provider.options` | No | `{}` | Provider-specific options (e.g. `endpoint`, `api_version` for Azure OpenAI). |
@@ -79,6 +88,48 @@ This is useful when:
 - The hierarchy is very deep and you only need the top-level stories
 - You want a fast preview of the epic structure without fetching all leaves
 - The ADO server is slow and you want to reduce API calls
+
+### Inline credentials
+
+The `credentials` section lets you store API keys and tokens directly in `run.json` instead of (or in addition to) environment variables.
+
+**Priority order** (highest first):
+1. `credentials.*` fields in `run.json`
+2. `ATC_*` environment variables / `.env` file
+
+Only non-empty values override. Leave a field empty (`""`) to fall back to the env var.
+
+| Field | Env var equivalent | Description |
+|-------|--------------------|-------------|
+| `credentials.ado_pat` | `ATC_ADO_PAT` | Azure DevOps Personal Access Token |
+| `credentials.anthropic_api_key` | `ATC_ANTHROPIC_API_KEY` | Anthropic (Claude) API key |
+| `credentials.azure_openai_endpoint` | `ATC_AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL |
+| `credentials.azure_openai_api_key` | `ATC_AZURE_OPENAI_API_KEY` | Azure OpenAI API key |
+| `credentials.azure_openai_deployment` | `ATC_AZURE_OPENAI_DEPLOYMENT` | Azure OpenAI deployment name |
+| `credentials.azure_openai_api_version` | `ATC_AZURE_OPENAI_API_VERSION` | Azure OpenAI API version |
+| `credentials.ollama_url` | `ATC_OLLAMA_URL` | Ollama server URL |
+| `credentials.ollama_model` | `ATC_OLLAMA_MODEL` | Ollama model name |
+| `credentials.cli_agent_cmd` | `ATC_CLI_AGENT_CMD` | CLI agent command template |
+
+**Example — all credentials in run.json (no .env needed):**
+
+```json
+{
+  "url": "https://ehbads.hrsa.gov/ads/EHBs/EHBs/_workitems/edit/411599",
+  "product_name": "EHB",
+  "credentials": {
+    "ado_pat": "your-pat-token",
+    "anthropic_api_key": "sk-ant-..."
+  },
+  "provider": {
+    "type": "claude"
+  }
+}
+```
+
+> **Security note:** Storing secrets in JSON files is convenient but less secure than environment variables. Ensure `run.json` is listed in `.gitignore` and not committed to version control.
+
+The ATC UI config editor includes password-masked fields for all credentials. Values entered in the UI are saved into the `credentials` section of `run.json`.
 
 ### Generation limits
 

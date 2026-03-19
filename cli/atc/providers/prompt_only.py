@@ -15,6 +15,6 @@ class PromptOnlyProvider(GenerationProvider):
     Use `atc run --resume` to pick up afterward.
     """
 
-    async def generate(self, prompt: str, images: list[Path] | None = None) -> str:
+    async def generate(self, prompt: str | "PromptBundle", images: list[Path] | None = None) -> str:
         # Return empty — the executor will skip writing the .feature file
         return ""

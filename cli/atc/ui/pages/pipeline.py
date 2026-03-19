@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
+import logging
 from pathlib import Path
 
 from nicegui import ui
@@ -13,9 +13,30 @@ from atc.executor import PipelineCancelled
 from atc.infra.config import RunConfig
 from atc.ui.state import NiceGuiReporter, app_state
 
+logger = logging.getLogger(__name__)
+
+# ── Persistent UI element references ─────────────────────────────────
+# Set once per page render and reused by the reporter callback so we
+# never call ui.navigate.to() while the pipeline is running.
+_log_container: ui.column | None = None
+_phase_row: ui.row | None = None
+_results_column: ui.column | None = None
+_run_btn: ui.button | None = None
+_cancel_btn: ui.button | None = None
+
+# Level → Tailwind color class
+_LEVEL_COLORS = {
+    "info": "text-slate-300",
+    "warning": "text-yellow-400",
+    "error": "text-red-400",
+    "success": "text-green-400",
+}
+
 
 def render() -> None:
     """Render the pipeline execution page."""
+    global _log_container, _phase_row, _results_column, _run_btn, _cancel_btn
+
     ui.label("Pipeline Execution").classes("text-3xl font-bold")
 
     # Config summary
@@ -49,22 +70,22 @@ def render() -> None:
 
     # Controls
     with ui.row().classes("gap-2"):
-        run_btn = ui.button(
+        _run_btn = ui.button(
             "Run Pipeline",
             icon="play_arrow",
             on_click=_start_pipeline,
         ).props("color=positive")
 
-        cancel_btn = ui.button(
+        _cancel_btn = ui.button(
             "Cancel",
             icon="stop",
             on_click=_cancel_pipeline,
         ).props("color=negative outlined")
 
         if app_state.is_running:
-            run_btn.disable()
+            _run_btn.disable()
         else:
-            cancel_btn.disable()
+            _cancel_btn.disable()
 
         # Load from file
         config_file = ui.input(
@@ -80,7 +101,8 @@ def render() -> None:
     # Phase stepper
     ui.label("Pipeline Phases").classes("text-xl font-semibold mt-4")
     with ui.card().classes("w-full"):
-        with ui.row().classes("w-full justify-between"):
+        _phase_row = ui.row().classes("w-full justify-between")
+        with _phase_row:
             for phase in Phase:
                 status = app_state.phase_progress.get(phase.value, "pending")
                 _render_phase_step(phase, status)
@@ -90,31 +112,37 @@ def render() -> None:
         # Left: Live log
         with ui.column().classes("flex-1"):
             ui.label("Live Log").classes("text-lg font-semibold")
-            log_container = ui.column().classes(
+            _log_container = ui.column().classes(
                 "w-full max-h-96 overflow-y-auto bg-slate-900 rounded p-3 gap-0"
             )
-            with log_container:
+            with _log_container:
                 if app_state.logs:
-                    for entry in app_state.logs[-100:]:  # show last 100
+                    for entry in app_state.logs[-100:]:
                         _render_log_entry(entry)
                 else:
-                    ui.label("No log entries yet. Run the pipeline to see output.").classes(
-                        "text-slate-500 text-sm"
-                    )
+                    ui.label(
+                        "No log entries yet. Run the pipeline to see output."
+                    ).classes("text-slate-500 text-sm")
 
         # Right: Results summary
         with ui.column().classes("w-80"):
             ui.label("Results").classes("text-lg font-semibold")
-            if app_state.result:
-                _render_results(app_state.result)
-            elif app_state.is_running:
-                with ui.card().classes("w-full"):
-                    ui.spinner("dots", size="lg")
-                    ui.label("Running...").classes("text-slate-400")
-            else:
-                with ui.card().classes("w-full"):
-                    ui.label("Run the pipeline to see results.").classes("text-slate-400")
+            _results_column = ui.column().classes("w-full")
+            with _results_column:
+                if app_state.result:
+                    _render_results(app_state.result)
+                elif app_state.is_running:
+                    with ui.card().classes("w-full"):
+                        ui.spinner("dots", size="lg")
+                        ui.label("Running...").classes("text-slate-400")
+                else:
+                    with ui.card().classes("w-full"):
+                        ui.label("Run the pipeline to see results.").classes(
+                            "text-slate-400"
+                        )
 
+
+# ── Phase / log / result renderers ────────────────────────────────────
 
 def _render_phase_step(phase: Phase, status: str) -> None:
     """Render a single phase step indicator."""
@@ -139,13 +167,7 @@ def _render_phase_step(phase: Phase, status: str) -> None:
 
 def _render_log_entry(entry) -> None:
     """Render a single log line."""
-    level_colors = {
-        "info": "text-slate-300",
-        "warning": "text-yellow-400",
-        "error": "text-red-400",
-        "success": "text-green-400",
-    }
-    color = level_colors.get(entry.level, "text-slate-300")
+    color = _LEVEL_COLORS.get(entry.level, "text-slate-300")
     ui.label(
         f"[{entry.timestamp}] [{entry.phase}] {entry.message}"
     ).classes(f"text-xs font-mono {color} whitespace-pre-wrap")
@@ -177,6 +199,47 @@ def _render_results(result: PipelineResult) -> None:
                 ).props("flat color=primary")
 
 
+# ── Live UI update callback (called from NiceGuiReporter) ─────────────
+
+def _push_live_update() -> None:
+    """Append the latest log entry and refresh phase indicators in-place.
+
+    This runs inside the NiceGUI event loop on the *same* client that
+    owns the page elements, so it is safe to mutate them directly — no
+    page navigation required.
+    """
+    # Append new log entry
+    if _log_container is not None and app_state.logs:
+        latest = app_state.logs[-1]
+        try:
+            with _log_container:
+                _render_log_entry(latest)
+            _log_container.scroll_to(percent=1.0)  # auto-scroll to bottom
+        except Exception:
+            pass  # element may be gone if user navigated away
+
+    # Refresh phase indicators
+    if _phase_row is not None:
+        try:
+            _phase_row.clear()
+            with _phase_row:
+                for phase in Phase:
+                    status = app_state.phase_progress.get(phase.value, "pending")
+                    _render_phase_step(phase, status)
+        except Exception:
+            pass
+
+
+def _safe_notify(message: str, type: str = "info") -> None:
+    """Call ui.notify, swallowing errors if the UI context is gone."""
+    try:
+        ui.notify(message, type=type)
+    except Exception:
+        logger.info("UI notify skipped (context unavailable): %s", message)
+
+
+# ── Pipeline lifecycle ────────────────────────────────────────────────
+
 async def _start_pipeline() -> None:
     """Start the pipeline execution."""
     if app_state.is_running:
@@ -196,16 +259,46 @@ async def _start_pipeline() -> None:
     app_state.reset_run()
     app_state.is_running = True
 
-    reporter = NiceGuiReporter(app_state, on_update=lambda: ui.navigate.to("/pipeline"))
+    # Update button states
+    if _run_btn is not None:
+        try:
+            _run_btn.disable()
+        except Exception:
+            pass
+    if _cancel_btn is not None:
+        try:
+            _cancel_btn.enable()
+        except Exception:
+            pass
+
+    # Clear previous log entries and show spinner
+    if _log_container is not None:
+        try:
+            _log_container.clear()
+        except Exception:
+            pass
+    if _results_column is not None:
+        try:
+            _results_column.clear()
+            with _results_column:
+                with ui.card().classes("w-full"):
+                    ui.spinner("dots", size="lg")
+                    ui.label("Running...").classes("text-slate-400")
+        except Exception:
+            pass
+
+    # Use in-place UI updates — never navigate while running
+    reporter = NiceGuiReporter(app_state, on_update=_push_live_update)
 
     try:
         from atc.executor import execute_pipeline
 
-        await execute_pipeline(config, reporter=reporter, cancel_event=app_state.cancel_event)
+        await execute_pipeline(
+            config, reporter=reporter, cancel_event=app_state.cancel_event
+        )
 
         # Build result
         result = PipelineResult(workspace_root=str(config.workspace_dir))
-        # Parse counts from logs
         for entry in app_state.logs:
             if "Generation complete:" in entry.message:
                 parts = entry.message
@@ -220,10 +313,10 @@ async def _start_pipeline() -> None:
 
         app_state.result = result
         app_state.save_run(result)
-        ui.notify("Pipeline completed!", type="positive")
+        _safe_notify("Pipeline completed!", type="positive")
 
     except PipelineCancelled:
-        ui.notify("Pipeline cancelled.", type="warning")
+        _safe_notify("Pipeline cancelled.", type="warning")
         from atc.ui.state import LogEntry
         from datetime import datetime
 
@@ -233,8 +326,15 @@ async def _start_pipeline() -> None:
             message="Pipeline cancelled by user",
             level="warning",
         ))
+        try:
+            _push_live_update()
+        except Exception:
+            pass
+
     except Exception as e:
-        ui.notify(f"Pipeline error: {e}", type="negative")
+        logger.exception("Pipeline error")
+        _safe_notify(f"Pipeline error: {e}", type="negative")
+
         from atc.ui.state import LogEntry
         from datetime import datetime
 
@@ -244,9 +344,34 @@ async def _start_pipeline() -> None:
             message=str(e),
             level="error",
         ))
+        try:
+            _push_live_update()
+        except Exception:
+            pass
+
     finally:
         app_state.is_running = False
-        ui.navigate.to("/pipeline")
+
+        # Restore button states
+        if _run_btn is not None:
+            try:
+                _run_btn.enable()
+            except Exception:
+                pass
+        if _cancel_btn is not None:
+            try:
+                _cancel_btn.disable()
+            except Exception:
+                pass
+
+        # Show final results in-place
+        if _results_column is not None and app_state.result:
+            try:
+                _results_column.clear()
+                with _results_column:
+                    _render_results(app_state.result)
+            except Exception:
+                pass
 
 
 def _cancel_pipeline() -> None:

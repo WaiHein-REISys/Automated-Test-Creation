@@ -1,4 +1,13 @@
-"""Prompt renderer — renders Jinja2 templates with story context."""
+"""Prompt renderer — renders multi-stage prompts (system + user) from Jinja2 templates.
+
+Pipeline:
+  Stage 1 (Generic):  Instructions.txt — SpecFlow rules applicable to any product.
+  Stage 2 (Tailored): system-prompt.md.j2 — product name, epic/feature context,
+                       step pattern references (format examples only).
+  Stage 3 (Actual):   scenario-generation.md.j2 — the specific user story content.
+
+Stages 1+2 → system message.  Stage 3 → user message.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +15,11 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from atc.core.models import Attachment, WorkItem, WorkItemNode
+from atc.core.models import Attachment, PromptBundle, WorkItem, WorkItemNode
 
 
 def _find_configs_dir() -> Path:
     """Find the configs directory relative to the package."""
-    # Walk up from this file to find configs/
     current = Path(__file__).resolve()
     for parent in current.parents:
         configs = parent / "configs"
@@ -21,7 +29,7 @@ def _find_configs_dir() -> Path:
 
 
 class PromptRenderer:
-    """Renders scenario generation prompts from Jinja2 templates."""
+    """Renders multi-stage scenario generation prompts."""
 
     def __init__(self, configs_dir: Path | None = None) -> None:
         self.configs_dir = configs_dir or _find_configs_dir()
@@ -49,12 +57,18 @@ class PromptRenderer:
         story: WorkItem,
         ancestors: list[WorkItemNode] | None = None,
         images: list[Attachment] | None = None,
-    ) -> str:
-        """Render the scenario generation prompt for a user story."""
+        product_name: str = "",
+    ) -> PromptBundle:
+        """Render a multi-stage prompt bundle for a user story.
+
+        Returns a PromptBundle with:
+          - system_message: generic rules + product-tailored context
+          - user_message:   the specific story to generate from
+        """
         ancestors = ancestors or []
         images = images or []
 
-        # Find epic and feature from ancestors
+        # Extract context from ancestor chain
         epic_title = ""
         feature_title = ""
         for ancestor in ancestors:
@@ -69,16 +83,29 @@ class PromptRenderer:
             if img.local_path and img.local_path.exists()
         ]
 
-        template = self._env.get_template("scenario-generation.md.j2")
-        return template.render(
+        # ── Stage 1 + 2: System message (generic rules + tailored context) ──
+        system_template = self._env.get_template("system-prompt.md.j2")
+        system_message = system_template.render(
             instructions=self._instructions,
+            product_name=product_name or "Unknown Product",
             epic_title=epic_title,
             feature_title=feature_title,
-            story_id=story.id,
-            story_title=story.title,
-            story_description=story.description or "(No description provided)",
-            story_acceptance_criteria=story.acceptance_criteria or "(No acceptance criteria provided)",
             common_steps=self._common_steps,
             background_steps=self._background_steps,
+        )
+
+        # ── Stage 3: User message (the actual story content) ──
+        user_template = self._env.get_template("scenario-generation.md.j2")
+        user_message = user_template.render(
+            story_id=story.id,
+            story_title=story.title,
+            story_type=story.work_item_type,
+            story_description=story.description or "(No description provided)",
+            story_acceptance_criteria=story.acceptance_criteria or "(No acceptance criteria provided)",
             image_paths=image_paths,
+        )
+
+        return PromptBundle(
+            system_message=system_message.strip(),
+            user_message=user_message.strip(),
         )

@@ -6,6 +6,34 @@ Notable changes, enhancements, and additions to ATC. Organized by date with the 
 
 ## 2026-03-18
 
+### Inline credentials in run.json
+
+**Files changed:** `cli/atc/infra/config.py`, `cli/atc/infra/settings.py`, `cli/atc/executor.py`, `cli/atc/providers/__init__.py`, `cli/atc/ui/pages/config_editor.py`
+
+Added a `credentials` section to `run.json` so PAT and API keys can be stored alongside the run configuration — no `.env` or environment variables needed.
+
+- New `CredentialsConfig` model with fields for all provider credentials
+- `resolve_settings()` helper merges run.json credentials over env vars (run.json wins when non-empty)
+- UI config editor has password-masked fields for all credentials
+- Provider error messages updated to mention both env var and run.json paths
+
+**Priority order:** `credentials.*` in run.json > `ATC_*` env var > `.env` file
+
+---
+
+### Hierarchy depth limit (`max_depth`)
+
+**Files changed:** `cli/atc/infra/config.py`, `cli/atc/infra/ado.py`, `cli/atc/executor.py`, `cli/atc/main.py`, `cli/run_full.ps1`, `cli/run_full.sh`, `setup-atc.ps1`, `cli/configs/runs/example.json`, `.windsurfrules`, `cli/atc/ui/pages/config_editor.py`
+
+Added `options.max_depth` to limit how many levels of child items are fetched:
+- `0` = unlimited (default, existing behavior)
+- `1` = root + direct children only
+- `2` = root → children → grandchildren, etc.
+
+Available via `--max-depth` CLI flag, `run.json`, `-MaxDepth` in PowerShell scripts, and the UI config editor.
+
+---
+
 ### On-premises Azure DevOps Server (ADS) URL support
 
 **Files changed:** `cli/atc/infra/ado_url.py`

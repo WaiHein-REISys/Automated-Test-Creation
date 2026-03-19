@@ -132,6 +132,89 @@ def render() -> None:
                     lambda e: _update_nested("provider", "model", e.sender.value),
                 )
 
+            # Credentials (inline in run.json)
+            with ui.card().classes("w-full"):
+                ui.label("Credentials").classes("font-semibold text-blue-400")
+                ui.label(
+                    "Optional — override env vars / .env.  Leave empty to use environment."
+                ).classes("text-xs text-slate-400 mb-1")
+
+                creds_data = app_state.config_data.get("credentials", {})
+
+                ui.input(
+                    "ADO PAT",
+                    value=creds_data.get("ado_pat", ""),
+                    password=True,
+                    password_toggle_button=True,
+                    placeholder="Leave empty to use ATC_ADO_PAT env var",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_nested("credentials", "ado_pat", e.sender.value),
+                )
+
+                with ui.expansion("Provider API Keys", icon="key").classes("w-full"):
+                    ui.input(
+                        "Anthropic API Key",
+                        value=creds_data.get("anthropic_api_key", ""),
+                        password=True,
+                        password_toggle_button=True,
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "anthropic_api_key", e.sender.value),
+                    )
+
+                    ui.input(
+                        "Azure OpenAI Endpoint",
+                        value=creds_data.get("azure_openai_endpoint", ""),
+                        placeholder="https://your-resource.openai.azure.com/",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "azure_openai_endpoint", e.sender.value),
+                    )
+                    ui.input(
+                        "Azure OpenAI API Key",
+                        value=creds_data.get("azure_openai_api_key", ""),
+                        password=True,
+                        password_toggle_button=True,
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "azure_openai_api_key", e.sender.value),
+                    )
+                    ui.input(
+                        "Azure OpenAI Deployment",
+                        value=creds_data.get("azure_openai_deployment", ""),
+                        placeholder="gpt-4o",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "azure_openai_deployment", e.sender.value),
+                    )
+
+                    ui.input(
+                        "Ollama URL",
+                        value=creds_data.get("ollama_url", ""),
+                        placeholder="http://localhost:11434",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "ollama_url", e.sender.value),
+                    )
+                    ui.input(
+                        "Ollama Model",
+                        value=creds_data.get("ollama_model", ""),
+                        placeholder="llama3",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "ollama_model", e.sender.value),
+                    )
+
+                    ui.input(
+                        "CLI Agent Command",
+                        value=creds_data.get("cli_agent_cmd", ""),
+                        placeholder="windsurf generate --prompt {prompt_file}",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_nested("credentials", "cli_agent_cmd", e.sender.value),
+                    )
+
             # Options
             with ui.card().classes("w-full"):
                 ui.label("Options").classes("font-semibold text-blue-400")
@@ -155,6 +238,17 @@ def render() -> None:
                     value=options_data.get("include_images_in_prompt", True),
                     on_change=lambda e: _update_nested(
                         "options", "include_images_in_prompt", e.value
+                    ),
+                )
+
+                ui.number(
+                    "Max Hierarchy Depth (0 = unlimited)",
+                    value=options_data.get("max_depth", 0),
+                    min=0,
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_nested(
+                        "options", "max_depth", int(e.sender.value or 0)
                     ),
                 )
 

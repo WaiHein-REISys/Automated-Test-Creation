@@ -17,12 +17,19 @@ class OllamaProvider(GenerationProvider):
         self._model = model
         self._base_url = base_url.rstrip("/")
 
-    async def generate(self, prompt: str, images: list[Path] | None = None) -> str:
+    async def generate(self, prompt: str | "PromptBundle", images: list[Path] | None = None) -> str:
+        from atc.core.models import PromptBundle  # noqa: F811
+
+        system_msg, user_msg = self._resolve_prompt(prompt)
+
         payload: dict = {
             "model": self._model,
-            "prompt": prompt,
+            "prompt": user_msg,
             "stream": False,
         }
+
+        if system_msg:
+            payload["system"] = system_msg
 
         # Add images for multimodal models (e.g., llava, bakllava)
         if images:

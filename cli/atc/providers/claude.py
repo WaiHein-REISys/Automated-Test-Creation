@@ -6,6 +6,7 @@ import base64
 import mimetypes
 from pathlib import Path
 
+from atc.core.models import PromptBundle
 from atc.providers.base import GenerationProvider
 
 
@@ -23,7 +24,13 @@ class ClaudeProvider(GenerationProvider):
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._model = model
 
-    async def generate(self, prompt: str, images: list[Path] | None = None) -> str:
+    async def generate(
+        self,
+        prompt: str | PromptBundle,
+        images: list[Path] | None = None,
+    ) -> str:
+        system_msg, user_msg = self._resolve_prompt(prompt)
+
         content: list[dict] = []
 
         # Add images if provided (vision)
@@ -42,23 +49,24 @@ class ClaudeProvider(GenerationProvider):
                             },
                         })
 
-        content.append({"type": "text", "text": prompt})
+        content.append({"type": "text", "text": user_msg})
 
-        response = await self._client.messages.create(
-            model=self._model,
-            max_tokens=8192,
-            messages=[{"role": "user", "content": content}],
-        )
+        kwargs: dict = {
+            "model": self._model,
+            "max_tokens": 8192,
+            "messages": [{"role": "user", "content": content}],
+        }
+        if system_msg:
+            kwargs["system"] = system_msg
 
-        # Extract text from response
+        response = await self._client.messages.create(**kwargs)
+
         result = ""
         for block in response.content:
             if hasattr(block, "text"):
                 result += block.text
 
-        # Clean up: extract just the feature file content if wrapped in markdown
-        result = _extract_feature_content(result)
-        return result
+        return _extract_feature_content(result)
 
 
 def _extract_feature_content(text: str) -> str:
