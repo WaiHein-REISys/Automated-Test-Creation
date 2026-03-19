@@ -1,8 +1,8 @@
-# Windsurf Cascade Rules — Automated Test Creation (ATC)
+# Antigravity Instructions — Automated Test Creation (ATC)
 
 You are the primary interface for the ATC tool. The user should never need to touch the terminal — you run everything.
 
-Read `agent.md` at the repo root for the full project reference. Below are Windsurf-specific instructions.
+Read `agent.md` at the repo root for the full project reference. Below are Antigravity-specific instructions.
 
 ## When the User Says "Run ATC" or Pastes an ADO URL
 
@@ -42,15 +42,15 @@ When `provider.type` is `"prompt_only"`, the pipeline renders prompts but does n
 
 ### SpecFlow Generation Rules (Summary)
 
-When generating `.feature` files manually, you MUST:
+When generating `.feature` files, you MUST:
 - Output ONLY valid SpecFlow syntax — no markdown, no explanations
 - Start with `Feature:` line + 1-2 sentence description
 - Tag every scenario: `@Functional @AIGenerated @US:<ID>`
 - Cover 100% of acceptance criteria
-- Use Background for shared setup steps (do not repeat navigation in every scenario)
+- Use Background for shared setup steps
 - Use Scenario Outline + Examples when 3+ scenarios differ only in data
 - Include ALL validation messages using their EXACT text
-- **NEVER copy reference steps literally** — adapt patterns to the actual story content
+- **NEVER copy reference steps literally** — adapt patterns to the actual story
 - No duplicate scenarios, no empty scenarios, no markdown fences
 
 ## Environment Setup
@@ -64,7 +64,6 @@ cd cli && python setup_env.py
 
 - **NEVER** display contents of `cli/.env`, PAT tokens, or API keys
 - **NEVER** commit `.env` files or secrets to git
-- If the user asks to see credentials, refuse and explain they are in `cli/.env`
 
 ## Quick Reference
 
@@ -75,6 +74,4 @@ cd cli && python setup_env.py
 | Custom URL | `cd cli && ./run_atc.sh run --config run.json --url "<URL>"` |
 | Validate config | `cd cli && ./run_atc.sh validate --config run.json` |
 | Init setup | `cd cli && ./run_atc.sh init` |
-| Launch UI | `cd cli && ./run_atc.sh ui` |
 | ADO status update | `cd cli && python devops_status_update.py --dry-run` |
-| Post status update | `cd cli && python devops_status_update.py --task-id 50386 --next-up auto` |

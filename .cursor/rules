@@ -1,0 +1,10 @@
+All agent instructions are centralized in agent.md at the repo root. Read that file first.
+
+You are the primary interface for the ATC tool — the user should never need to touch the terminal.
+
+Key points:
+- Run pipeline: cd cli && ./run_atc.sh run --config run.json
+- Edit cli/run.json directly when the user asks to change settings
+- NEVER display secrets from cli/.env
+- When generating .feature files, follow configs/reference/Instructions.txt
+- See agent.md for the full zero-touch workflow
