@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 _PROBE_VERSIONS = ("7.1", "7.0", "6.0")
 
 
+def _has_matching_tag(item: WorkItem, filter_tags: set[str]) -> bool:
+    """Return True if the work item has at least one tag in *filter_tags*.
+
+    Comparison is case-insensitive (*filter_tags* must already be lowercased).
+    """
+    return any(t.lower() in filter_tags for t in item.tags)
+
+
 class AdoClient:
     """Async client for Azure DevOps REST API."""
 
@@ -164,7 +172,13 @@ class AdoClient:
                     pass
         return child_ids
 
-    async def get_tree(self, root_id: int, *, max_depth: int = 0) -> WorkItemNode:
+    async def get_tree(
+        self,
+        root_id: int,
+        *,
+        max_depth: int = 0,
+        filter_tags: list[str] | None = None,
+    ) -> WorkItemNode:
         """Recursively fetch the work item hierarchy.
 
         Args:
@@ -173,10 +187,20 @@ class AdoClient:
                 ``0`` means unlimited (full tree).
                 ``1`` fetches the root and its direct children only.
                 ``2`` fetches root → children → grandchildren, etc.
+            filter_tags: If non-empty, only include child work items that have
+                at least one of these tags (case-insensitive). The root item
+                is always included regardless of tags.
         """
         root_item = await self.get_work_item(root_id)
         root_node = WorkItemNode(item=root_item)
-        await self._build_tree(root_node, current_depth=1, max_depth=max_depth)
+        # Normalize filter tags to lowercase for case-insensitive matching
+        normalized_tags = {t.lower() for t in filter_tags} if filter_tags else set()
+        await self._build_tree(
+            root_node,
+            current_depth=1,
+            max_depth=max_depth,
+            filter_tags=normalized_tags,
+        )
         return root_node
 
     async def _build_tree(
@@ -185,6 +209,7 @@ class AdoClient:
         *,
         current_depth: int = 1,
         max_depth: int = 0,
+        filter_tags: set[str] | None = None,
     ) -> None:
         """Recursively populate children for a node.
 
@@ -192,6 +217,8 @@ class AdoClient:
             node: The parent node to expand.
             current_depth: How many levels deep we are (root's children = 1).
             max_depth: Stop expanding beyond this depth. ``0`` = unlimited.
+            filter_tags: If non-empty, only include children that have at least
+                one of these tags (already lowercased).
         """
         # Respect depth limit
         if max_depth and current_depth > max_depth:
@@ -211,13 +238,29 @@ class AdoClient:
 
         children = await self.get_work_items_batch(child_ids)
         for child_item in children:
+            # Apply tag filter: skip children that don't match any required tag
+            if filter_tags and not _has_matching_tag(child_item, filter_tags):
+                logger.debug(
+                    "Skipping work item #%d (%s) — tags %s don't match filter %s",
+                    child_item.id,
+                    child_item.title,
+                    child_item.tags,
+                    filter_tags,
+                )
+                continue
+
             child_node = WorkItemNode(item=child_item)
             node.children.append(child_node)
             await self._build_tree(
                 child_node,
                 current_depth=current_depth + 1,
                 max_depth=max_depth,
+                filter_tags=filter_tags,
             )
+
+    # ------------------------------------------------------------------
+    # Download helpers
+    # ------------------------------------------------------------------
 
     async def download_attachment(self, url: str, dest: Path) -> Path:
         """Download an attachment to a local path."""

@@ -97,10 +97,17 @@ async def execute_pipeline(
     _check_cancel(cancel_event)
     async with AdoClient(target.org_url, target.project, pat, api_version=api_version) as ado:
         max_depth = config.options.max_depth
+        filter_tags = config.options.filter_tags
         if max_depth:
             print_status(f"Hierarchy depth limit: {max_depth} level(s) below root")
+        if filter_tags:
+            print_status(f"Tag filter: only children with tags {filter_tags}")
         print_status("Fetching work item hierarchy...")
-        tree = await ado.get_tree(target.work_item_id, max_depth=max_depth)
+        tree = await ado.get_tree(
+            target.work_item_id,
+            max_depth=max_depth,
+            filter_tags=filter_tags,
+        )
 
         from atc.output.console import print_tree
 
