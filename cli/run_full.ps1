@@ -6,12 +6,17 @@
 #   .\run_full.ps1 -Url "..." -DryRun       # workspace + prompts for a specific URL
 #   .\run_full.ps1 -MaxDepth 2              # only fetch 2 levels below root
 #   .\run_full.ps1 -Url "..." -MaxDepth 1   # root + direct children only
+#   .\run_full.ps1 -RunTests                # run tests after pipeline completes
+#   .\run_full.ps1 -RunTests -TestTag "Automated"  # run tests by SpecFlow tag
 
 param(
     [string]$Url,
     [string]$Config = "run.json",
     [switch]$DryRun,
-    [int]$MaxDepth = 0
+    [int]$MaxDepth = 0,
+    [switch]$RunTests,
+    [string]$TestTag,
+    [string]$TestFilter
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +35,18 @@ if ($DryRun) {
 
 if ($MaxDepth -gt 0) {
     $atcArgs += @("--max-depth", $MaxDepth)
+}
+
+if ($RunTests) {
+    $atcArgs += "--run-tests"
+}
+
+if ($TestTag) {
+    $atcArgs += @("--test-tag", $TestTag)
+}
+
+if ($TestFilter) {
+    $atcArgs += @("--test-filter", $TestFilter)
 }
 
 # Delegate to the standard wrapper

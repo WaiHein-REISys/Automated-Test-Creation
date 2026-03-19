@@ -17,6 +17,7 @@ class Phase(Enum):
     GENERATE_FEATURES = "generate_features"
     COPY_TO_REPO = "copy_to_repo"
     GIT_OPERATIONS = "git_operations"
+    RUN_TESTS = "run_tests"
 
     @property
     def label(self) -> str:
@@ -28,6 +29,7 @@ class Phase(Enum):
             "generate_features": "Generate Features",
             "copy_to_repo": "Copy to Repo",
             "git_operations": "Git Operations",
+            "run_tests": "Run Tests",
         }[self.value]
 
 
@@ -43,6 +45,21 @@ class ProgressEvent:
 
 
 @dataclass
+class TestExecutionResult:
+    """Summary of a test execution run (EHB Test Runner)."""
+
+    executed: bool = False
+    exit_code: int = -1
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    outcome: str = "NotRun"
+    trx_path: str = ""
+    extent_report: str = ""
+    failed_tests: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class PipelineResult:
     """Summary of a pipeline run."""
 
@@ -52,6 +69,7 @@ class PipelineResult:
     total: int = 0
     workspace_root: str = ""
     events: list[ProgressEvent] = field(default_factory=list)
+    test_result: TestExecutionResult = field(default_factory=TestExecutionResult)
 
 
 class ProgressReporter(Protocol):

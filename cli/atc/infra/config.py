@@ -45,6 +45,48 @@ class ProviderConfig(BaseModel):
     options: dict[str, str] = Field(default_factory=dict)
 
 
+class TestExecutionConfig(BaseModel):
+    """Configuration for running generated tests against an EHB2010 project.
+
+    When ``enabled`` is True and ``target_repo_path`` is set in the parent
+    ``RunConfig``, the pipeline will execute tests after the git-commit phase
+    using the standalone EHB Test Runner (``cli/tools/ehb_test_runner.py``).
+
+    The ``target_repo_path`` field on ``RunConfig`` is reused as the
+    ``--project`` path for the test runner (it points to the EHB2010 root
+    that contains the ``EHB.UI.Automation/`` folder).
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Run generated tests after the pipeline completes",
+    )
+    tag: str = Field(
+        default="",
+        description="SpecFlow tag to filter tests (e.g. 'Automated', 'SF424Short')",
+    )
+    filter_expr: str = Field(
+        default="",
+        description="Raw dotnet test --filter expression (overrides tag)",
+    )
+    run_id: str = Field(
+        default="",
+        description="Unique run identifier for TRX naming.  Auto-generated if empty.",
+    )
+    results_dir: str = Field(
+        default="",
+        description="Directory for TRX output files.  Defaults to ./TestResults in CWD.",
+    )
+    config: str = Field(
+        default="Release",
+        description="Build configuration (Release / Debug)",
+    )
+    auto_build: bool = Field(
+        default=True,
+        description="Build the project before running tests",
+    )
+
+
 class RunOptions(BaseModel):
     """Runtime options."""
 
@@ -72,6 +114,12 @@ class RunOptions(BaseModel):
     )
     generation_only_ids: list[int] = Field(
         default_factory=list, description="Only generate for these work item IDs (empty = all)"
+    )
+
+    # Test execution
+    test_execution: TestExecutionConfig = Field(
+        default_factory=TestExecutionConfig,
+        description="Post-pipeline test execution settings (EHB Test Runner)",
     )
 
 

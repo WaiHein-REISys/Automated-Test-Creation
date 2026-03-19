@@ -43,6 +43,9 @@ def run(
     url: Annotated[Optional[str], typer.Option("--url", "-u", help="ADO work item URL")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Simulate without making changes")] = False,
     max_depth: Annotated[int, typer.Option("--max-depth", help="Max hierarchy depth (0 = unlimited)")] = 0,
+    run_tests: Annotated[bool, typer.Option("--run-tests", help="Run generated tests after pipeline completes")] = False,
+    test_tag: Annotated[Optional[str], typer.Option("--test-tag", help="SpecFlow tag for test execution")] = None,
+    test_filter: Annotated[Optional[str], typer.Option("--test-filter", help="dotnet test filter expression")] = None,
 ) -> None:
     """Execute the ATC pipeline: fetch ADO items, generate feature files."""
     from atc.executor import execute_pipeline
@@ -56,6 +59,12 @@ def run(
         run_config.options.dry_run = True
     if max_depth:
         run_config.options.max_depth = max_depth
+    if run_tests:
+        run_config.options.test_execution.enabled = True
+    if test_tag:
+        run_config.options.test_execution.tag = test_tag
+    if test_filter:
+        run_config.options.test_execution.filter_expr = test_filter
 
     if not run_config.url:
         console.print("[red]Error: No ADO URL provided. Use --url or set 'url' in config.[/red]")

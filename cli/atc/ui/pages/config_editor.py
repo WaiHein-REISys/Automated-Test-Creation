@@ -288,6 +288,73 @@ def render() -> None:
                     ),
                 )
 
+            # Test Execution
+            with ui.card().classes("w-full"):
+                ui.label("Test Execution (EHB Runner)").classes("font-semibold text-blue-400")
+                ui.label(
+                    "Run generated tests using the EHB Test Runner.  "
+                    "Uses target_repo_path as the EHB2010 project root."
+                ).classes("text-xs text-slate-400 mb-1")
+
+                test_exec_data = options_data.get("test_execution", {})
+
+                ui.switch(
+                    "Enable Test Execution",
+                    value=test_exec_data.get("enabled", False),
+                    on_change=lambda e: _update_test_exec("enabled", e.value),
+                )
+
+                ui.input(
+                    "SpecFlow Tag (e.g. Automated)",
+                    value=test_exec_data.get("tag", ""),
+                    placeholder="Leave empty to run all tests",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_test_exec("tag", e.sender.value),
+                )
+
+                ui.input(
+                    "Filter Expression (overrides tag)",
+                    value=test_exec_data.get("filter_expr", ""),
+                    placeholder="e.g. FullyQualifiedName~PriorApproval",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_test_exec("filter_expr", e.sender.value),
+                )
+
+                with ui.expansion("Advanced Test Settings", icon="tune").classes("w-full"):
+                    ui.input(
+                        "Run ID (auto-generated if empty)",
+                        value=test_exec_data.get("run_id", ""),
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_test_exec("run_id", e.sender.value),
+                    )
+
+                    ui.input(
+                        "Results Directory",
+                        value=test_exec_data.get("results_dir", ""),
+                        placeholder="./TestResults",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_test_exec("results_dir", e.sender.value),
+                    )
+
+                    ui.select(
+                        ["Release", "Debug"],
+                        value=test_exec_data.get("config", "Release"),
+                        label="Build Configuration",
+                    ).classes("w-full").on(
+                        "change",
+                        lambda e: _update_test_exec("config", e.sender.value),
+                    )
+
+                    ui.switch(
+                        "Auto Build Before Tests",
+                        value=test_exec_data.get("auto_build", True),
+                        on_change=lambda e: _update_test_exec("auto_build", e.value),
+                    )
+
         # Right: JSON preview
         with ui.column().classes("flex-1 gap-3"):
             ui.label("JSON Preview").classes("text-xl font-semibold")
@@ -334,6 +401,15 @@ def _update_nested(section: str, key: str, value) -> None:
     if section not in app_state.config_data:
         app_state.config_data[section] = {}
     app_state.config_data[section][key] = value
+
+
+def _update_test_exec(key: str, value) -> None:
+    """Update a field inside options.test_execution."""
+    if "options" not in app_state.config_data:
+        app_state.config_data["options"] = {}
+    if "test_execution" not in app_state.config_data["options"]:
+        app_state.config_data["options"]["test_execution"] = {}
+    app_state.config_data["options"]["test_execution"][key] = value
 
 
 def _update_provider_type(ptype: str) -> None:

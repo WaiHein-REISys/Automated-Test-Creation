@@ -176,6 +176,7 @@ def _render_log_entry(entry) -> None:
 def _render_results(result: PipelineResult) -> None:
     """Render the pipeline results summary."""
     with ui.card().classes("w-full"):
+        ui.label("Generation").classes("font-semibold text-blue-400 text-sm")
         with ui.column().classes("gap-2"):
             with ui.row().classes("justify-between"):
                 ui.label("Generated").classes("text-green-400")
@@ -197,6 +198,44 @@ def _render_results(result: PipelineResult) -> None:
                     icon="folder_open",
                     on_click=lambda: ui.navigate.to("/workspace"),
                 ).props("flat color=primary")
+
+    # Test execution results (if tests were run)
+    tr = result.test_result
+    if tr.executed:
+        with ui.card().classes("w-full mt-2"):
+            ui.label("Test Execution").classes("font-semibold text-blue-400 text-sm")
+            status_color = "text-green-400" if tr.exit_code == 0 else "text-red-400"
+            status_label = "PASSED" if tr.exit_code == 0 else "FAILED"
+            with ui.column().classes("gap-2"):
+                with ui.row().classes("justify-between"):
+                    ui.label("Status").classes("font-semibold")
+                    ui.label(status_label).classes(f"font-bold {status_color}")
+                with ui.row().classes("justify-between"):
+                    ui.label("Tests Passed").classes("text-green-400")
+                    ui.label(str(tr.passed)).classes("font-bold text-green-400")
+                with ui.row().classes("justify-between"):
+                    ui.label("Tests Failed").classes("text-red-400")
+                    ui.label(str(tr.failed)).classes("font-bold text-red-400")
+                ui.separator()
+                with ui.row().classes("justify-between"):
+                    ui.label("Total Tests").classes("font-semibold")
+                    ui.label(str(tr.total)).classes("font-bold")
+
+                if tr.trx_path:
+                    ui.label(f"TRX: {tr.trx_path}").classes("text-xs text-slate-400 break-all")
+                if tr.extent_report:
+                    ui.label(f"Report: {tr.extent_report}").classes("text-xs text-slate-400 break-all")
+
+                if tr.failed_tests:
+                    with ui.expansion("Failed Tests", icon="error").classes("w-full"):
+                        for ft in tr.failed_tests:
+                            with ui.row().classes("gap-2"):
+                                ui.icon("close", size="xs").classes("text-red-400")
+                                ui.label(ft.get("name", "")).classes("text-xs font-mono text-red-300")
+                            if ft.get("error_message"):
+                                ui.label(ft["error_message"][:200]).classes(
+                                    "text-xs text-slate-400 ml-6"
+                                )
 
 
 # ── Live UI update callback (called from NiceGuiReporter) ─────────────
@@ -298,6 +337,8 @@ async def _start_pipeline() -> None:
         )
 
         # Build result
+        from atc.core.progress import TestExecutionResult
+
         result = PipelineResult(workspace_root=str(config.workspace_dir))
         for entry in app_state.logs:
             if "Generation complete:" in entry.message:
@@ -309,7 +350,31 @@ async def _start_pipeline() -> None:
                     result.total = int(parts.split("out of")[1].strip().rstrip(")"))
                 except (ValueError, IndexError):
                     pass
-                break
+            # Parse test results from log entries
+            if "All tests passed:" in entry.message:
+                try:
+                    nums = entry.message.split("All tests passed:")[1].split("(")[0].strip()
+                    p, t = nums.split("/")
+                    result.test_result = TestExecutionResult(
+                        executed=True, exit_code=0,
+                        passed=int(p), total=int(t), failed=0,
+                        outcome="Passed",
+                    )
+                except (ValueError, IndexError):
+                    result.test_result = TestExecutionResult(executed=True, exit_code=0, outcome="Passed")
+            elif "Tests finished:" in entry.message and entry.phase == "Run Tests":
+                try:
+                    msg = entry.message
+                    passed = int(msg.split("passed")[0].split()[-1])
+                    failed = int(msg.split("failed")[0].split()[-1])
+                    total = int(msg.split("out of")[1].strip())
+                    result.test_result = TestExecutionResult(
+                        executed=True, exit_code=1,
+                        passed=passed, failed=failed, total=total,
+                        outcome="Failed",
+                    )
+                except (ValueError, IndexError):
+                    result.test_result = TestExecutionResult(executed=True, exit_code=1, outcome="Failed")
 
         app_state.result = result
         app_state.save_run(result)

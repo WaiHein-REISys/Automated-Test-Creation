@@ -7,6 +7,8 @@
 #   ./run_full.sh --url "..." --dry-run      # workspace + prompts for a specific URL
 #   ./run_full.sh --max-depth 2              # only fetch 2 levels below root
 #   ./run_full.sh --url "..." --max-depth 1  # root + direct children only
+#   ./run_full.sh --run-tests                # run tests after pipeline completes
+#   ./run_full.sh --run-tests --test-tag Automated  # run tests by SpecFlow tag
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

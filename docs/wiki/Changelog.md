@@ -6,6 +6,46 @@ Notable changes, enhancements, and additions to ATC. Organized by date with the 
 
 ## 2026-03-18
 
+### Test execution integration (EHB Test Runner)
+
+**Files changed:** `cli/atc/infra/config.py`, `cli/atc/core/progress.py`, `cli/atc/executor.py`, `cli/atc/main.py`, `cli/atc/ui/pages/pipeline.py`, `cli/atc/ui/pages/config_editor.py`, `cli/run_full.ps1`, `cli/run_full.sh`, `cli/configs/runs/example.json`
+
+**Standalone tools:** `cli/tools/ehb_test_runner.py`, `cli/tools/parse_trx.py`, `cli/tools/external-runner.sh`, `cli/tools/external-runner.cmd`
+
+Added a new pipeline phase (Phase 8: **Run Tests**) that executes generated `.feature` files against an EHB2010 .NET project after the git-commit phase.
+
+**Key design decisions:**
+- `target_repo_path` in `run.json` is reused as the `--project` path for the EHB Test Runner (it points to the EHB2010 root containing the `EHB.UI.Automation/` folder)
+- Tests run in a background thread (`asyncio.to_thread`) to avoid blocking the event loop
+- `cli/tools/` files are imported at runtime — the pipeline still works without .NET SDK installed
+- Test results (TRX) are written to the caller's CWD, not the EHB2010 repo
+- Zero external dependencies (stdlib + .NET SDK only)
+
+**New config section (`options.test_execution`):**
+```json
+{
+  "options": {
+    "test_execution": {
+      "enabled": false,
+      "tag": "Automated",
+      "filter_expr": "",
+      "run_id": "",
+      "results_dir": "./TestResults",
+      "config": "Release",
+      "auto_build": true
+    }
+  }
+}
+```
+
+**New CLI flags:** `--run-tests`, `--test-tag <tag>`, `--test-filter <expr>`
+
+**New PowerShell flags:** `-RunTests`, `-TestTag <tag>`, `-TestFilter <expr>`
+
+**UI:** Config editor has a "Test Execution (EHB Runner)" card; pipeline results page shows passed/failed/total test counts, TRX path, and expandable failed test details.
+
+---
+
 ### Inline credentials in run.json
 
 **Files changed:** `cli/atc/infra/config.py`, `cli/atc/infra/settings.py`, `cli/atc/executor.py`, `cli/atc/providers/__init__.py`, `cli/atc/ui/pages/config_editor.py`
@@ -171,6 +211,6 @@ These are documented in the [CLI Design](../Automated_Test_Creation_CLI_Design.m
 | Duplicate prevention (fingerprint + WIQL + rapidfuzz) | Technical Plan Sprint 2 | Medium |
 | Structured bug reports (11 sections) | Technical Plan Sprint 3 | Medium |
 | Severity classification | Technical Plan Sprint 3 | Low |
-| Test execution phase | CLI Design §2 | Low |
+| ~~Test execution phase~~ | ~~CLI Design §2~~ | ✅ Done |
 | PII redaction | Technical Plan §4 | Low |
 | NDJSON output format | CLI Design §7 | Low |

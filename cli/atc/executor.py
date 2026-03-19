@@ -378,8 +378,72 @@ async def execute_pipeline(
                 await _emit(reporter, Phase.COPY_TO_REPO, "No target repo configured", level="info")
         await _phase_end(reporter, Phase.COPY_TO_REPO, "Copy phase complete")
 
+    # Phase 7: Run tests (optional)
+    test_exec = config.options.test_execution
+    project_path = str(config.target_repo_path) if config.target_repo_path else ""
+
+    if test_exec.enabled and project_path and not config.options.dry_run:
+        _check_cancel(cancel_event)
+        await _phase_start(reporter, Phase.RUN_TESTS, "Running generated tests...")
+
+        try:
+            test_result = await _run_tests(
+                project_path=project_path,
+                test_config=test_exec,
+                reporter=reporter,
+            )
+
+            if test_result.all_passed:
+                msg = (
+                    f"All tests passed: {test_result.passed}/{test_result.total} "
+                    f"(TRX: {test_result.trx_path})"
+                )
+                console.print(f"[green]{msg}[/green]")
+                await _emit(reporter, Phase.RUN_TESTS, msg, level="success")
+            else:
+                msg = (
+                    f"Tests finished: {test_result.passed} passed, "
+                    f"{test_result.failed} failed out of {test_result.total}"
+                )
+                console.print(f"[red]{msg}[/red]")
+                await _emit(reporter, Phase.RUN_TESTS, msg, level="error")
+
+                for ft in test_result.failed_tests:
+                    err_line = f"  FAIL: {ft['name']}"
+                    if ft.get("error_message"):
+                        err_line += f" — {ft['error_message'][:120]}"
+                    console.print(f"[red]{err_line}[/red]")
+                    await _emit(reporter, Phase.RUN_TESTS, err_line, level="error")
+
+            await _phase_end(reporter, Phase.RUN_TESTS, "Test execution complete")
+
+        except FileNotFoundError as e:
+            msg = f"Test runner error: {e}"
+            console.print(f"[red]{msg}[/red]")
+            await _emit(reporter, Phase.RUN_TESTS, msg, level="error")
+            await _phase_end(reporter, Phase.RUN_TESTS, "Test execution failed")
+
+        except Exception as e:
+            msg = f"Test execution error: {e}"
+            console.print(f"[red]{msg}[/red]")
+            await _emit(reporter, Phase.RUN_TESTS, msg, level="error")
+            await _phase_end(reporter, Phase.RUN_TESTS, "Test execution failed")
+
+    elif test_exec.enabled and config.options.dry_run:
+        await _phase_start(reporter, Phase.RUN_TESTS, "Skipping tests (dry run)")
+        await _emit(reporter, Phase.RUN_TESTS, "Skipped test execution (dry run)", level="warning")
+        await _phase_end(reporter, Phase.RUN_TESTS, "Skipped")
+    elif test_exec.enabled and not project_path:
+        await _phase_start(reporter, Phase.RUN_TESTS, "Skipping tests (no project path)")
+        await _emit(
+            reporter, Phase.RUN_TESTS,
+            "Skipped — set target_repo_path to the EHB2010 project root to enable test execution",
+            level="warning",
+        )
+        await _phase_end(reporter, Phase.RUN_TESTS, "Skipped")
+
     print_success("ATC pipeline complete!")
-    await _emit(reporter, Phase.GIT_OPERATIONS, "Pipeline complete!", level="success")
+    await _emit(reporter, Phase.RUN_TESTS if test_exec.enabled else Phase.GIT_OPERATIONS, "Pipeline complete!", level="success")
 
 
 def _get_feature_parent_id(ancestors: list["WorkItemNode"]) -> int | None:
@@ -388,6 +452,74 @@ def _get_feature_parent_id(ancestors: list["WorkItemNode"]) -> int | None:
         if ancestor.work_item_type == "Feature":
             return ancestor.id
     return None
+
+
+async def _run_tests(
+    project_path: str,
+    test_config: "TestExecutionConfig",
+    reporter: ProgressReporter | None = None,
+) -> "TestResult":
+    """Execute tests using the EHB Test Runner.
+
+    Uses ``target_repo_path`` from run.json as the ``--project`` path
+    (pointing to the EHB2010 root containing ``EHB.UI.Automation/``).
+
+    The runner and TRX parser live in ``cli/tools/`` and are imported at
+    call-time so the rest of the pipeline keeps working even if dotnet
+    is not installed.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    # Make cli/tools/ importable at runtime
+    tools_dir = _Path(__file__).resolve().parent.parent.parent / "tools"
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+
+    from ehb_test_runner import EHBTestRunner  # type: ignore[import-untyped]
+
+    await _emit(
+        reporter, Phase.RUN_TESTS,
+        f"Initialising EHB Test Runner — project: {project_path}",
+    )
+
+    runner = EHBTestRunner(
+        project_path=project_path,
+        results_dir=test_config.results_dir or None,
+        config=test_config.config,
+        auto_build=test_config.auto_build,
+    )
+
+    # List available tags for information
+    try:
+        tags = runner.list_tags()
+        if tags:
+            await _emit(
+                reporter, Phase.RUN_TESTS,
+                f"Available tags: {', '.join(tags[:15])}{'...' if len(tags) > 15 else ''}",
+            )
+    except Exception:
+        pass
+
+    run_kwargs: dict = {}
+    if test_config.tag:
+        run_kwargs["tag"] = test_config.tag
+    if test_config.filter_expr:
+        run_kwargs["filter_expr"] = test_config.filter_expr
+    if test_config.run_id:
+        run_kwargs["run_id"] = test_config.run_id
+
+    await _emit(
+        reporter, Phase.RUN_TESTS,
+        f"Running tests{' (tag=' + test_config.tag + ')' if test_config.tag else ''}"
+        f"{' (filter=' + test_config.filter_expr + ')' if test_config.filter_expr else ''}...",
+    )
+
+    # Run synchronously in a thread to avoid blocking the event loop
+    import asyncio as _asyncio
+
+    result = await _asyncio.to_thread(runner.run, **run_kwargs)
+    return result
 
 
 _LEAF_TYPES = {"User Story", "Product Backlog Item", "Task"}
