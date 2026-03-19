@@ -89,10 +89,11 @@ class EHBTestRunner:
         auto_build: bool = True,
     ):
         self.project_path = os.path.abspath(project_path)
+        project_suffix = os.path.basename(self.project_path)
         self.csproj = os.path.join(
             self.project_path,
             "EHB.UI.Automation",
-            "EHB.UI.Automation.EHB2010.csproj",
+            f"EHB.UI.Automation.{project_suffix}.csproj",
         )
         self.results_dir = os.path.abspath(results_dir or os.path.join(os.getcwd(), "TestResults"))
         self.config = config
@@ -101,7 +102,8 @@ class EHBTestRunner:
         if not os.path.isfile(self.csproj):
             raise FileNotFoundError(
                 f"Cannot find {self.csproj}. "
-                f"Make sure project_path points to the EHB2010 root."
+                f"Make sure project_path points to the project root "
+                f"(e.g. a directory ending in EHB2010, GPRSReview, etc.)."
             )
 
     def build(self) -> bool:
@@ -119,6 +121,8 @@ class EHBTestRunner:
         filter_expr: Optional[str] = None,
         run_id: Optional[str] = None,
         quiet: bool = True,
+        folders: Optional[list[str]] = None,
+        files: Optional[list[str]] = None,
     ) -> TestResult:
         """
         Execute tests and return structured results.
@@ -128,6 +132,10 @@ class EHBTestRunner:
             filter_expr:  Raw dotnet test --filter expression (overrides tag).
             run_id:       Unique identifier for this run. Auto-generated if omitted.
             quiet:        Suppress dotnet test console output.
+            folders:      Run only tests under these folders (relative to Features/).
+                          E.g. ["GPRSReview", "PriorApproval/SF424Short"].
+            files:        Run only tests from specific feature files (name or path).
+                          E.g. ["SF424ShortApplicationCreation.feature"].
 
         Returns:
             TestResult with summary, individual test details, and file paths.
@@ -149,6 +157,14 @@ class EHBTestRunner:
 
         # Construct filter
         effective_filter = filter_expr or (f"Category={tag}" if tag else "")
+
+        # Build folder/file scope filter and combine with existing filter
+        scope_filter = self._build_scope_filter(folders, files)
+        if scope_filter:
+            if effective_filter:
+                effective_filter = f"({effective_filter}) & ({scope_filter})"
+            else:
+                effective_filter = scope_filter
 
         # Construct command
         trx_filename = f"TestResults_{run_id}.trx"
@@ -202,6 +218,40 @@ class EHBTestRunner:
                 outcome="NoTRXGenerated",
             )
 
+    @staticmethod
+    def _build_scope_filter(
+        folders: Optional[list[str]] = None,
+        files: Optional[list[str]] = None,
+    ) -> str:
+        """Build a dotnet test filter from folder/file scope lists.
+
+        Folders are matched via ``FullyQualifiedName~`` using the namespace
+        segment that corresponds to the folder path (dots replace slashes).
+        Files are matched by feature file name (without extension) as a
+        namespace/class segment.
+        """
+        parts: list[str] = []
+
+        if folders:
+            for folder in folders:
+                # Convert path separators to dots for namespace matching
+                ns_segment = folder.replace("/", ".").replace("\\", ".").strip(".")
+                parts.append(f"FullyQualifiedName~{ns_segment}")
+
+        if files:
+            for file in files:
+                # Strip .feature extension and path separators for class name match
+                name = os.path.basename(file)
+                if name.endswith(".feature"):
+                    name = name[: -len(".feature")]
+                parts.append(f"FullyQualifiedName~{name}")
+
+        if not parts:
+            return ""
+
+        # Combine with OR — run tests matching ANY of the specified scopes
+        return " | ".join(parts)
+
     def list_tags(self) -> list[str]:
         """
         Scan feature files for all SpecFlow tags.
@@ -233,6 +283,8 @@ if __name__ == "__main__":
     parser.add_argument("--project", required=True, help="Path to EHB2010 root")
     parser.add_argument("--tag", help="SpecFlow tag to run")
     parser.add_argument("--filter", dest="filter_expr", help="dotnet test filter")
+    parser.add_argument("--folder", action="append", default=[], help="Run tests under this folder (relative to Features/). Repeatable.")
+    parser.add_argument("--file", action="append", default=[], dest="files", help="Run tests from this feature file. Repeatable.")
     parser.add_argument("--run-id", help="Unique run ID")
     parser.add_argument("--output", help="Results directory")
     parser.add_argument("--list-tags", action="store_true", help="List available tags and exit")
@@ -253,6 +305,8 @@ if __name__ == "__main__":
         tag=args.tag,
         filter_expr=args.filter_expr,
         run_id=args.run_id,
+        folders=args.folder or None,
+        files=args.files or None,
     )
 
     if args.json:

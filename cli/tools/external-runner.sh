@@ -17,6 +17,8 @@ RESULTS_DIR=""
 RUN_ID=$(date +"%Y%m%d_%H%M%S")
 QUIET=0
 SKIP_BUILD=0
+FOLDERS=()
+FILES=()
 
 show_help() {
     cat <<'HELP'
@@ -34,6 +36,8 @@ show_help() {
   OPTIONS:
     --tag <tag>         Run scenarios by SpecFlow tag
     --filter <expr>     dotnet test filter expression
+    --folder <path>     Run tests under this folder (relative to Features/). Repeatable.
+    --file <name>       Run tests from this feature file. Repeatable.
     --config <cfg>      Build configuration (default: Release)
     --output <dir>      Results directory (default: ./TestResults in CWD)
     --run-id <id>       Unique run identifier for file naming
@@ -64,6 +68,8 @@ while [[ $# -gt 0 ]]; do
         --config)     CONFIG="$2"; shift 2 ;;
         --output)     RESULTS_DIR="$2"; shift 2 ;;
         --run-id)     RUN_ID="$2"; shift 2 ;;
+        --folder)     FOLDERS+=("$2"); shift 2 ;;
+        --file)       FILES+=("$2"); shift 2 ;;
         --quiet)      QUIET=1; shift ;;
         --skip-build) SKIP_BUILD=1; shift ;;
         -h|--help)    show_help ;;
@@ -80,10 +86,13 @@ fi
 # Resolve to absolute path
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
 
-CSPROJ="$PROJECT_ROOT/EHB.UI.Automation/EHB.UI.Automation.EHB2010.csproj"
+# Derive csproj name from the last directory segment of PROJECT_ROOT
+PROJECT_SUFFIX="$(basename "$PROJECT_ROOT")"
+CSPROJ="$PROJECT_ROOT/EHB.UI.Automation/EHB.UI.Automation.${PROJECT_SUFFIX}.csproj"
 if [[ ! -f "$CSPROJ" ]]; then
     echo "ERROR: Cannot find $CSPROJ" >&2
-    echo "       Make sure --project points to the EHB2010 root directory." >&2
+    echo "       Make sure --project points to the project root directory" >&2
+    echo "       (e.g. a directory ending in EHB2010, GPRSReview, etc.)." >&2
     exit 1
 fi
 
@@ -108,6 +117,35 @@ fi
 if [[ $SKIP_BUILD -eq 0 ]]; then
     [[ $QUIET -eq 0 ]] && echo "[external-runner] Building..."
     dotnet build "$CSPROJ" --configuration "$CONFIG" --nologo -v q > /dev/null 2>&1
+fi
+
+# --- Build scope filter from --folder / --file ---
+SCOPE_PARTS=()
+for f in "${FOLDERS[@]}"; do
+    # Convert path separators to dots for namespace matching
+    ns="${f//\//.}"
+    ns="${ns//\\/.}"
+    SCOPE_PARTS+=("FullyQualifiedName~${ns}")
+done
+for f in "${FILES[@]}"; do
+    # Strip path and .feature extension for class name match
+    name="$(basename "$f" .feature)"
+    SCOPE_PARTS+=("FullyQualifiedName~${name}")
+done
+
+if [[ ${#SCOPE_PARTS[@]} -gt 0 ]]; then
+    SCOPE_FILTER=""
+    for i in "${!SCOPE_PARTS[@]}"; do
+        if [[ $i -gt 0 ]]; then
+            SCOPE_FILTER="$SCOPE_FILTER | "
+        fi
+        SCOPE_FILTER="$SCOPE_FILTER${SCOPE_PARTS[$i]}"
+    done
+    if [[ -n "$FILTER" ]]; then
+        FILTER="($FILTER) & ($SCOPE_FILTER)"
+    else
+        FILTER="$SCOPE_FILTER"
+    fi
 fi
 
 # --- Run tests ---

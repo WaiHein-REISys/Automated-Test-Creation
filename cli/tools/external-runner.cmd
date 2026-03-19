@@ -19,6 +19,8 @@ set "TIMESTAMP=%TIMESTAMP: =0%"
 set "RUN_ID=%TIMESTAMP%"
 set "QUIET=0"
 set "SKIP_BUILD=0"
+set "SCOPE_FILTER="
+set "SCOPE_COUNT=0"
 
 REM --- Parse arguments ---
 :parse_args
@@ -29,6 +31,8 @@ if /i "%~1"=="--filter"      ( set "FILTER=%~2" & shift & shift & goto :parse_ar
 if /i "%~1"=="--config"      ( set "CONFIG=%~2" & shift & shift & goto :parse_args )
 if /i "%~1"=="--output"      ( set "RESULTS_DIR=%~2" & shift & shift & goto :parse_args )
 if /i "%~1"=="--run-id"      ( set "RUN_ID=%~2" & shift & shift & goto :parse_args )
+if /i "%~1"=="--folder"      ( call :add_folder "%~2" & shift & shift & goto :parse_args )
+if /i "%~1"=="--file"        ( call :add_file "%~2" & shift & shift & goto :parse_args )
 if /i "%~1"=="--quiet"       ( set "QUIET=1" & shift & goto :parse_args )
 if /i "%~1"=="--skip-build"  ( set "SKIP_BUILD=1" & shift & goto :parse_args )
 if /i "%~1"=="--help"        ( goto :show_help )
@@ -43,10 +47,13 @@ if "%PROJECT_ROOT%"=="" (
     exit /b 1
 )
 
-set "CSPROJ=%PROJECT_ROOT%\EHB.UI.Automation\EHB.UI.Automation.EHB2010.csproj"
+REM Derive csproj name from the last directory segment of PROJECT_ROOT
+for %%I in ("%PROJECT_ROOT%") do set "PROJECT_SUFFIX=%%~nxI"
+set "CSPROJ=%PROJECT_ROOT%\EHB.UI.Automation\EHB.UI.Automation.%PROJECT_SUFFIX%.csproj"
 if not exist "%CSPROJ%" (
     echo ERROR: Cannot find %CSPROJ% 1>&2
-    echo        Make sure --project points to the EHB2010 root directory. 1>&2
+    echo        Make sure --project points to the project root directory 1>&2
+    echo        (e.g. a directory ending in EHB2010, GPRSReview, etc.^). 1>&2
     exit /b 1
 )
 
@@ -74,6 +81,15 @@ if %SKIP_BUILD% equ 0 (
     )
 )
 
+REM --- Combine scope filter with main filter ---
+if not "%SCOPE_FILTER%"=="" (
+    if not "%FILTER%"=="" (
+        set "FILTER=(%FILTER%) & (%SCOPE_FILTER%)"
+    ) else (
+        set "FILTER=%SCOPE_FILTER%"
+    )
+)
+
 REM --- Step 2: Run tests with TRX logger ---
 set "TEST_CMD=dotnet test "%CSPROJ%" --configuration %CONFIG% --no-build --nologo"
 set "TEST_CMD=%TEST_CMD% --logger "trx;LogFileName=TestResults_%RUN_ID%.trx""
@@ -98,6 +114,32 @@ echo EXIT_CODE=%TEST_EXIT%
 exit /b %TEST_EXIT%
 
 REM ============================================================================
+:add_folder
+REM Convert / and \ to . for namespace matching
+set "_ns=%~1"
+set "_ns=%_ns:/=.%"
+set "_ns=%_ns:\=.%"
+if %SCOPE_COUNT% gtr 0 (
+    set "SCOPE_FILTER=%SCOPE_FILTER% | FullyQualifiedName~%_ns%"
+) else (
+    set "SCOPE_FILTER=FullyQualifiedName~%_ns%"
+)
+set /a SCOPE_COUNT+=1
+goto :eof
+
+:add_file
+REM Strip path and .feature extension for class name match
+set "_fname=%~nx1"
+set "_fname=%_fname:.feature=%"
+if %SCOPE_COUNT% gtr 0 (
+    set "SCOPE_FILTER=%SCOPE_FILTER% | FullyQualifiedName~%_fname%"
+) else (
+    set "SCOPE_FILTER=FullyQualifiedName~%_fname%"
+)
+set /a SCOPE_COUNT+=1
+goto :eof
+
+REM ============================================================================
 :show_help
 echo.
 echo  EHB2010 External Test Orchestrator (Standalone)
@@ -113,6 +155,8 @@ echo.
 echo  OPTIONS:
 echo    --tag ^<tag^>         Run scenarios by SpecFlow tag
 echo    --filter ^<expr^>     dotnet test filter expression
+echo    --folder ^<path^>     Run tests under this folder (relative to Features/). Repeatable.
+echo    --file ^<name^>       Run tests from this feature file. Repeatable.
 echo    --config ^<cfg^>      Build configuration (default: Release)
 echo    --output ^<dir^>      Results directory (default: .\TestResults)
 echo    --run-id ^<id^>       Unique run identifier for file naming

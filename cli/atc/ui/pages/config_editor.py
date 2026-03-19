@@ -346,6 +346,30 @@ def render() -> None:
                     lambda e: _update_test_exec("filter_expr", e.sender.value),
                 )
 
+                ui.input(
+                    "Folders (comma-separated, relative to Features/)",
+                    value=", ".join(test_exec_data.get("folders", [])),
+                    placeholder="e.g. GPRSReview, PriorApproval/SF424Short",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_test_exec(
+                        "folders",
+                        [f.strip() for f in e.sender.value.split(",") if f.strip()],
+                    ),
+                )
+
+                ui.input(
+                    "Files (comma-separated feature files)",
+                    value=", ".join(test_exec_data.get("files", [])),
+                    placeholder="e.g. SubmitReview.feature, SF424ShortApplicationCreation.feature",
+                ).classes("w-full").on(
+                    "change",
+                    lambda e: _update_test_exec(
+                        "files",
+                        [f.strip() for f in e.sender.value.split(",") if f.strip()],
+                    ),
+                )
+
                 with ui.expansion("Advanced Test Settings", icon="tune").classes("w-full"):
                     ui.input(
                         "Run ID (auto-generated if empty)",

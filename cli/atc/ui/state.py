@@ -155,6 +155,17 @@ class NiceGuiReporter:
         self.state.add_log(entry)
         await self._notify()
 
+    async def phase_fail(self, phase: Phase, message: str) -> None:
+        self.state.phase_progress[phase.value] = "failed"
+        entry = LogEntry(
+            timestamp=self._now(),
+            phase=phase.label,
+            message=f"✗ {message}",
+            level="error",
+        )
+        self.state.add_log(entry)
+        await self._notify()
+
     async def item_progress(
         self, phase: Phase, current: int, total: int, message: str
     ) -> None:

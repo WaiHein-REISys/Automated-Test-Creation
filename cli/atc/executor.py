@@ -378,19 +378,26 @@ async def execute_pipeline(
             # Phase 6: Git operations
             await _phase_start(reporter, Phase.GIT_OPERATIONS, "Running git operations...")
             if config.branch_name:
+                from pathlib import Path as _Path
                 from atc.infra.git import GitClient
 
-                git = GitClient(config.target_repo_path)
-                git.checkout_or_create_branch(config.branch_name)
-                git.add_all()
-                git.commit(f"feat(atc): add generated feature files for Epic #{target.work_item_id}")
-                console.print(f"[bold]Committed to branch:[/bold] {config.branch_name}")
-                await _emit(
-                    reporter,
-                    Phase.GIT_OPERATIONS,
-                    f"Committed to branch: {config.branch_name}",
-                    level="success",
-                )
+                # Validate that target_repo_path is a git repository
+                if not (_Path(config.target_repo_path) / ".git").exists():
+                    msg = f"Target repo path is not a git repository: {config.target_repo_path}"
+                    console.print(f"[yellow]Warning: {msg}[/yellow]")
+                    await _emit(reporter, Phase.GIT_OPERATIONS, msg, level="warning")
+                else:
+                    git = GitClient(config.target_repo_path)
+                    git.checkout_or_create_branch(config.branch_name)
+                    git.add_all()
+                    git.commit(f"feat(atc): add generated feature files for Epic #{target.work_item_id}")
+                    console.print(f"[bold]Committed to branch:[/bold] {config.branch_name}")
+                    await _emit(
+                        reporter,
+                        Phase.GIT_OPERATIONS,
+                        f"Committed to branch: {config.branch_name}",
+                        level="success",
+                    )
             await _phase_end(reporter, Phase.GIT_OPERATIONS, "Git operations complete")
         else:
             if config.options.dry_run:
@@ -493,7 +500,8 @@ async def _run_tests(
     from pathlib import Path as _Path
 
     # Make cli/tools/ importable at runtime
-    tools_dir = _Path(__file__).resolve().parent.parent.parent / "tools"
+    # __file__ is at cli/atc/executor.py, so parent.parent gets us to cli/
+    tools_dir = _Path(__file__).resolve().parent.parent / "tools"
     if str(tools_dir) not in sys.path:
         sys.path.insert(0, str(tools_dir))
 
@@ -529,11 +537,25 @@ async def _run_tests(
         run_kwargs["filter_expr"] = test_config.filter_expr
     if test_config.run_id:
         run_kwargs["run_id"] = test_config.run_id
+    if test_config.folders:
+        run_kwargs["folders"] = test_config.folders
+    if test_config.files:
+        run_kwargs["files"] = test_config.files
+
+    scope_parts = []
+    if test_config.tag:
+        scope_parts.append(f"tag={test_config.tag}")
+    if test_config.filter_expr:
+        scope_parts.append(f"filter={test_config.filter_expr}")
+    if test_config.folders:
+        scope_parts.append(f"folders={test_config.folders}")
+    if test_config.files:
+        scope_parts.append(f"files={test_config.files}")
+    scope_desc = f" ({', '.join(scope_parts)})" if scope_parts else ""
 
     await _emit(
         reporter, Phase.RUN_TESTS,
-        f"Running tests{' (tag=' + test_config.tag + ')' if test_config.tag else ''}"
-        f"{' (filter=' + test_config.filter_expr + ')' if test_config.filter_expr else ''}...",
+        f"Running tests{scope_desc}...",
     )
 
     # Run synchronously in a thread to avoid blocking the event loop

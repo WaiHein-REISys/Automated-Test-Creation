@@ -85,6 +85,22 @@ class TestExecutionConfig(BaseModel):
         default=True,
         description="Build the project before running tests",
     )
+    folders: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Run only tests under these folders (relative to EHB.UI.Automation/Features). "
+            "E.g. ['GPRSReview', 'PriorApproval/SF424Short']. "
+            "When empty, all tests are eligible (subject to tag/filter_expr)."
+        ),
+    )
+    files: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Run only tests from these specific feature files (name or relative path). "
+            "E.g. ['SF424ShortApplicationCreation.feature', 'GPRSReview/SubmitReview.feature']. "
+            "When empty, all tests are eligible (subject to tag/filter_expr)."
+        ),
+    )
 
 
 class RunOptions(BaseModel):

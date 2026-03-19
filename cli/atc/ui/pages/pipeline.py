@@ -135,6 +135,24 @@ def render() -> None:
                     with ui.card().classes("w-full"):
                         ui.spinner("dots", size="lg")
                         ui.label("Running...").classes("text-slate-400")
+                elif "cancelled" in app_state.phase_progress.values():
+                    with ui.card().classes("w-full"):
+                        ui.icon("block", size="lg").classes("text-yellow-400")
+                        ui.label("Pipeline was cancelled.").classes(
+                            "text-yellow-400 font-semibold"
+                        )
+                elif "failed" in app_state.phase_progress.values():
+                    with ui.card().classes("w-full"):
+                        ui.icon("error", size="lg").classes("text-red-400")
+                        ui.label("Pipeline failed.").classes(
+                            "text-red-400 font-semibold"
+                        )
+                        for entry in reversed(app_state.logs):
+                            if entry.level == "error":
+                                ui.label(entry.message).classes(
+                                    "text-xs text-red-300 break-all"
+                                )
+                                break
                 else:
                     with ui.card().classes("w-full"):
                         ui.label("Run the pipeline to see results.").classes(
@@ -150,11 +168,15 @@ def _render_phase_step(phase: Phase, status: str) -> None:
         "pending": "text-slate-500",
         "active": "text-blue-400",
         "done": "text-green-400",
+        "failed": "text-red-400",
+        "cancelled": "text-yellow-400",
     }
     icon_map = {
         "pending": "radio_button_unchecked",
         "active": "pending",
         "done": "check_circle",
+        "failed": "cancel",
+        "cancelled": "block",
     }
     with ui.column().classes("items-center gap-1"):
         ui.icon(icon_map.get(status, "radio_button_unchecked")).classes(
@@ -385,6 +407,11 @@ async def _start_pipeline() -> None:
         from atc.ui.state import LogEntry
         from datetime import datetime
 
+        # Mark any active phases as cancelled, remaining as pending
+        for pv, ps in app_state.phase_progress.items():
+            if ps == "active":
+                app_state.phase_progress[pv] = "cancelled"
+
         app_state.add_log(LogEntry(
             timestamp=datetime.now().strftime("%H:%M:%S"),
             phase="Cancelled",
@@ -402,6 +429,11 @@ async def _start_pipeline() -> None:
 
         from atc.ui.state import LogEntry
         from datetime import datetime
+
+        # Mark any active phases as failed, remaining as pending
+        for pv, ps in app_state.phase_progress.items():
+            if ps == "active":
+                app_state.phase_progress[pv] = "failed"
 
         app_state.add_log(LogEntry(
             timestamp=datetime.now().strftime("%H:%M:%S"),
@@ -429,12 +461,41 @@ async def _start_pipeline() -> None:
             except Exception:
                 pass
 
-        # Show final results in-place
-        if _results_column is not None and app_state.result:
+        # Always update results column — clear the "Running..." spinner
+        if _results_column is not None:
             try:
                 _results_column.clear()
                 with _results_column:
-                    _render_results(app_state.result)
+                    if app_state.result:
+                        _render_results(app_state.result)
+                    else:
+                        # Determine terminal status from phase progress
+                        was_cancelled = "cancelled" in app_state.phase_progress.values()
+                        was_failed = "failed" in app_state.phase_progress.values()
+                        if was_cancelled:
+                            with ui.card().classes("w-full"):
+                                ui.icon("block", size="lg").classes("text-yellow-400")
+                                ui.label("Pipeline was cancelled.").classes(
+                                    "text-yellow-400 font-semibold"
+                                )
+                        elif was_failed:
+                            with ui.card().classes("w-full"):
+                                ui.icon("error", size="lg").classes("text-red-400")
+                                ui.label("Pipeline failed.").classes(
+                                    "text-red-400 font-semibold"
+                                )
+                                # Show the last error from logs
+                                for entry in reversed(app_state.logs):
+                                    if entry.level == "error":
+                                        ui.label(entry.message).classes(
+                                            "text-xs text-red-300 break-all"
+                                        )
+                                        break
+                        else:
+                            with ui.card().classes("w-full"):
+                                ui.label("Run the pipeline to see results.").classes(
+                                    "text-slate-400"
+                                )
             except Exception:
                 pass
 
