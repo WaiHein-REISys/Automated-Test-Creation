@@ -63,6 +63,16 @@ class RunOptions(BaseModel):
         ),
     )
 
+    # Tag-based filtering for child work items
+    filter_tags: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Only include child work items that have at least one of these tags. "
+            "Empty list = no filtering (fetch all children). "
+            "Tags are matched case-insensitively against the ADO System.Tags field."
+        ),
+    )
+
     # Generation limits (0 = unlimited, empty list = all)
     generation_limit: int = Field(
         default=0, description="Max total feature files to generate (0 = unlimited)"
