@@ -381,12 +381,7 @@ async def execute_pipeline(
                 from pathlib import Path as _Path
                 from atc.infra.git import GitClient
 
-                # Validate that target_repo_path is a git repository
-                if not (_Path(config.target_repo_path) / ".git").exists():
-                    msg = f"Target repo path is not a git repository: {config.target_repo_path}"
-                    console.print(f"[yellow]Warning: {msg}[/yellow]")
-                    await _emit(reporter, Phase.GIT_OPERATIONS, msg, level="warning")
-                else:
+                try:
                     git = GitClient(config.target_repo_path)
                     git.checkout_or_create_branch(config.branch_name)
                     git.add_all()
@@ -398,6 +393,14 @@ async def execute_pipeline(
                         f"Committed to branch: {config.branch_name}",
                         level="success",
                     )
+                except (ValueError, FileNotFoundError) as e:
+                    msg = f"Git operations skipped — {e}"
+                    console.print(f"[yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GIT_OPERATIONS, msg, level="warning")
+                except RuntimeError as e:
+                    msg = f"Git operation failed — {e}"
+                    console.print(f"[yellow]{msg}[/yellow]")
+                    await _emit(reporter, Phase.GIT_OPERATIONS, msg, level="warning")
             await _phase_end(reporter, Phase.GIT_OPERATIONS, "Git operations complete")
         else:
             if config.options.dry_run:
@@ -500,7 +503,7 @@ async def _run_tests(
     from pathlib import Path as _Path
 
     # Make cli/tools/ importable at runtime
-    # __file__ is at cli/atc/executor.py, so parent.parent gets us to cli/
+    # __file__ = cli/atc/executor.py → .parent = cli/atc/ → .parent = cli/
     tools_dir = _Path(__file__).resolve().parent.parent / "tools"
     if str(tools_dir) not in sys.path:
         sys.path.insert(0, str(tools_dir))
